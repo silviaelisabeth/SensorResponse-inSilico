@@ -535,6 +535,7 @@ def _pHsensor_response(t_plateau, pH_plateau, dfpH_target, t90_pH, ph_res, sig_b
         if n == 0:
             y_1 = sig_bgd
         else:
+            print(dsig[n-1])
             y_1 = dsig[n - 1]['signal / mV'].to_numpy()[-1]
         sdiff = dfpH_target['target potential / mV'].loc[n * t_plateau] - y_1
 
@@ -616,7 +617,7 @@ def _nh3sensor_response(t_plateau, pH_plateau, dfph_re, t90_nh3, nh3_res, dfpot_
             # 1st sensor response - always different
             t_sens = np.arange(0, t_plateau - 1, step)
             # apparent pH
-            ph_i = dfph_re.loc[t_plateau]
+            # ph_i = dfph_re.loc[t_plateau]
             y1 = _gompertz_curve_v1(x=t_sens, t90=t90_nh3, tau=nh3_res, slope='decline',  s_diff=sdiff,
                                     pstart=dfpot_target.loc[0, 'nh3 / mV'])
             dfSig = pd.DataFrame(y1, index=t_sens, columns=['signal / mV'])
@@ -664,7 +665,7 @@ def pH_sensor(sensor_ph, para_meas, df_alpha):
 
     # pH changes to target potential over time
     # create time range
-    l = [[ph_i] * t_steady for ph_i in pH_steps]
+    l = [[ph_i] * int(t_steady) for ph_i in pH_steps]
     ls_pH = l[0]
     [ls_pH.extend(l_i) for l_i in l[1:]]
 
@@ -701,6 +702,7 @@ def NH3_sensor(df_alpha, dfph_re, dfpH_target, sensor_nh3, para_meas):
 
     # target NH3 signal for NH3 and NH4+ according to the measured pH - specific target concentration over time in %
     nh3_target, nh4_target, dfalpha_target = _alpha_vs_time(df_alpha=df_alpha, dfpH_target=dfpH_target)
+
 
     if 'target concentration' in para_meas:
         cnh3_target = para_meas['target concentration']
@@ -795,3 +797,85 @@ def tan_simulation(sensor_ph, para_meas, sensor_nh3, plot='result'):
 
     return dic_target, dic_sens_calib, dic_sens_record, dic_figures, df_tan
 
+
+def save_report(para_meas, sensor_ph, sensor_nh3, dsens_record, dtarget):
+    df_p = pd.DataFrame(np.zeros(shape=(len(para_meas.values()), 2)))
+    df_p[0] = list(para_meas.keys())
+    df_p[1] = para_meas.values()
+    df_p.loc[-1, :] = ['parameter', 'values']
+    df_p = df_p.sort_index()
+    df_p.columns = ['parameter', 'values']
+    df_p.index = ['general'] * len(df_p.index)
+
+    df_ph = pd.DataFrame(np.zeros(shape=(len(sensor_ph.values()), 2)))
+    df_ph[0] = list(sensor_ph.keys())
+    df_ph[1] = sensor_ph.values()
+    df_ph.columns = ['parameter', 'values']
+    df_ph.index = ['ph'] * len(df_ph.index)
+
+    df_nh3 = pd.DataFrame(np.zeros(shape=(len(sensor_nh3.values()), 2)))
+    df_nh3[0] = list(sensor_nh3.keys())
+    df_nh3[1] = sensor_nh3.values()
+    df_nh3.columns = ['parameter', 'values']
+    df_nh3.index = ['nh3'] * len(df_nh3.index)
+
+    df_para = pd.concat([df_p, df_ph, df_nh3])
+
+    # ..................................................................
+    # results
+    dd = pd.concat([dsens_record['NH3'], dsens_record['tan']], axis=1).T.sort_index().T
+    df_res_ = pd.concat([dd, dsens_record['pH']])
+    df_res_.columns = ['TAN_record', 'nh3_record / ppm', 'nh4_record / ppm', 'pH_record']
+
+    df_ = pd.concat([dtarget['target conc nh3'], dtarget['TAN']], axis=1).T.sort_index().T
+    df_.columns = ['TAN_target', 'nh3_target / ppm', 'nh4_target / ppm', 'pH_target']
+    df_res = pd.concat([df_, df_res_]).sort_index().T.sort_index().T
+    xnew = [int(i) for i in df_res.index]
+    df_res.index = xnew
+    df_res = df_res.groupby(df_res.index).mean()
+    header_res = pd.DataFrame(df_res.columns, columns=['Time / s'], index=df_res.columns).T
+
+    df_out = pd.concat([header_res, df_res])
+    df_para.columns = [0, 1]
+    df_out.columns = np.arange(0, len(df_out.columns))
+
+    output = pd.concat([df_para, df_out])
+
+    return output
+
+
+def load_data(file):
+    file_ = open(file, 'r')
+    count = 0
+    ls_lines = list()
+    while True:
+        count += 1
+        line = file_.readline()
+        # if line is empty end of file is reached
+        if not line:
+            break
+        ls_lines.append(line.strip().split('\t'))
+    file_.close()
+
+    # ............................................................
+    ls_general = list()
+    for l in ls_lines:
+        if l[0] == 'general':
+            ls_general.append(l[1:])
+    df_general = pd.DataFrame(ls_general).T.set_index(0).T.set_index('parameter')
+
+    ls_ph = list()
+    for l in ls_lines:
+        if l[0] == 'ph':
+            ls_ph.append(l[1:])
+    df_ph = pd.DataFrame(ls_ph, columns=['parameter', 'values'])
+    df_ph = df_ph.set_index('parameter')
+
+    ls_nh3 = list()
+    for l in ls_lines:
+        if l[0] == 'nh3':
+            ls_nh3.append(l[1:])
+    df_nh3 = pd.DataFrame(ls_nh3, columns=['parameter', 'values'])
+    df_nh3 = df_nh3.set_index('parameter')
+
+    return df_general, df_ph, df_nh3

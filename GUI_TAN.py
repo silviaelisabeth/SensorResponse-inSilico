@@ -1,50 +1,44 @@
 __author__ = 'szieger'
-__project__ = 'in silico sensor response'
+__project__ = 'in silico study for sensor response'
 
-# coding: utf-8
 import basics_sensorSignal as bs
 import sys
-from PyQt5.QtWidgets import *
 from PyQt5.QtGui import *
 import matplotlib.pyplot as plt
-import seaborn as sns
-from PyQt5.QtWidgets import (QApplication, QWidget, QVBoxLayout, QHBoxLayout, QMainWindow, QPushButton, QFileDialog,
-                              QAction, qApp, QGridLayout, QLabel, QInputDialog, QLineEdit, QCheckBox, QTextEdit,
-                              QGroupBox, QMessageBox, QTableWidget, QTableWidgetItem, QFrame)
-from PyQt5.QtGui import QIcon, QValidator, QDoubleValidator, QIntValidator, QColor
-from PyQt5.QtCore import Qt, QSize
+from PyQt5.QtWidgets import (QApplication, QWidget, QVBoxLayout, QHBoxLayout, QMainWindow, QPushButton, QAction, qApp,
+                             QGridLayout, QLabel, QLineEdit, QGroupBox, QFileDialog, QFrame, QMessageBox)
+from PyQt5.QtGui import QIcon, QDoubleValidator
+from PyQt5.QtCore import Qt
 from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT, FigureCanvasQTAgg
-import pandas as pd
 import numpy as np
 import seaborn as sns
 import os
-from matplotlib.patches import Ellipse
-import matplotlib.patches as mpatches
-from matplotlib.ticker import MultipleLocator, FormatStrFormatter
 
-fs = 10.
+# .....................................................................................................................
+# global parameter
+dcolor = dict({'pH': '#1CC49A', 'sig pH': '#4B5258', 'NH3': '#196E94', 'sig NH3': '#314945', 'NH4': '#DCA744',
+               'sig NH4': '#89621A', 'TAN': '#A86349'})
+ls = dict({'target': '-.', 'simulation': ':'})
+save_type = ['png', 'svg']
+sns.set_context('paper', font_scale=1.)
 
 
+# .....................................................................................................................
 class MainWindow(QMainWindow):
     def __init__(self):
         super(MainWindow, self).__init__()
         self.initUI()
-        self.xcoords = []
+        self.dic_sens_record = None
         self.setWindowIcon(QIcon('icon.png'))
 
     def initUI(self):
-        # creating main window
+        # creating main window (GUI)
         w = QWidget()
         self.setCentralWidget(w)
         self.setWindowTitle('Sensor response')
 
+        # ---------------------------------------------------------------------------------------
         # Menu bar - Load data, Save report, Save all, Exit
-        loadAction = QAction('&Load data', self)
-        loadAction.setStatusTip('Load data')
-        saveAction_report = QAction('&Save report', self)
-        saveAction_report.setStatusTip('Save results')
-        saveAction_all = QAction('&Save all', self)
-        saveAction_all.setStatusTip('Save all')
         exitAction = QAction('&Exit', self)
         exitAction.setShortcut('Ctrl+Q')
         exitAction.setStatusTip('Exit application')
@@ -53,11 +47,9 @@ class MainWindow(QMainWindow):
 
         menubar = self.menuBar()
         fileMenu = menubar.addMenu('&File')
-        fileMenu.addAction(loadAction)
-        fileMenu.addAction(saveAction_report)
-        fileMenu.addAction(saveAction_all)
         fileMenu.addAction(exitAction)
 
+        # ---------------------------------------------------------------------------------------
         # (Invisible) structure of main window (=grid)
         mlayout = QVBoxLayout(w)
 
@@ -80,7 +72,7 @@ class MainWindow(QMainWindow):
         hbox_middle.addLayout(hbox_mtop), hbox_middle.addLayout(hbox_mbottom)
         hbox_right.addLayout(hbox_rtop), hbox_right.addLayout(hbox_rbottom)
 
-    # ----------------------------------------------------
+        # ----------------------------------------------------
         # draw additional "line" to separate parameters from plots and to separate navigation from rest
         vline = QFrame()
         vline.setFrameShape(QFrame.VLine | QFrame.Raised)
@@ -92,12 +84,12 @@ class MainWindow(QMainWindow):
         hline.setLineWidth(2)
         vbox_middle.addWidget(hline)
 
-        # ------------------------------------------------------------------------------------
+        # ----------------------------------------------------
         # left side of main window (-> data treatment)
         vbox_top.addWidget(w)
         vbox_top.setContentsMargins(5, 10, 10, 5)
 
-    # ---------------------------------------------------
+        # ---------------------------------------------------------------------------------------------------------
         # PARAMETERS
         # general settings
         temperature_label, temperature_unit_label = QLabel(self), QLabel(self)
@@ -106,14 +98,21 @@ class MainWindow(QMainWindow):
         self.temperature_edit = QLineEdit(self)
         self.temperature_edit.setValidator(QDoubleValidator())
         self.temperature_edit.setAlignment(Qt.AlignRight)
-        self.temperature_edit.setText('15.')
+        self.temperature_edit.setText('25.')
 
         pH_label = QLabel(self)
         pH_label.setText('pH range')
         self.phrange_edit = QLineEdit(self)
         self.phrange_edit.setValidator(QRegExpValidator())
         self.phrange_edit.setAlignment(Qt.AlignRight)
-        self.phrange_edit.setText('0, 14, 0.01')
+        self.phrange_edit.setText('0, 14')
+
+        tsteady_label, tsteady_unit = QLabel(self), QLabel(self)
+        tsteady_label.setText('Plateau time'), tsteady_unit.setText('s')
+        self.tsteady_edit = QLineEdit(self)
+        self.tsteady_edit.setValidator(QDoubleValidator())
+        self.tsteady_edit.setAlignment(Qt.AlignRight)
+        self.tsteady_edit.setText('10.')
 
         smprate_label, smprate_unit_label = QLabel(self), QLabel(self)
         smprate_label.setText('sampling rate')
@@ -130,15 +129,15 @@ class MainWindow(QMainWindow):
         self.ph_t90_edit = QLineEdit(self)
         self.ph_t90_edit.setValidator(QDoubleValidator())
         self.ph_t90_edit.setAlignment(Qt.AlignRight)
-        self.ph_t90_edit.setText('1e-2')
+        self.ph_t90_edit.setText('0.1')
 
         ph_signal_label, ph_signal_unit = QLabel(self), QLabel(self)
-        ph_signal_label.setText('Sensor potential')
+        ph_signal_label.setText('Background signal')
         ph_signal_unit.setText('mV')
         self.ph_signal_edit = QLineEdit(self)
         self.ph_signal_edit.setValidator(QRegExpValidator())
         self.ph_signal_edit.setAlignment(Qt.AlignRight)
-        self.ph_signal_edit.setText('5.0, 400.')
+        self.ph_signal_edit.setText('5.0')
 
         ph_res_label, ph_res_unit = QLabel(self), QLabel(self)
         ph_res_label.setText('Sensor resolution')
@@ -163,7 +162,7 @@ class MainWindow(QMainWindow):
         self.nh3_t90_edit = QLineEdit(self)
         self.nh3_t90_edit.setValidator(QDoubleValidator())
         self.nh3_t90_edit.setAlignment(Qt.AlignRight)
-        self.nh3_t90_edit.setText('0.1')
+        self.nh3_t90_edit.setText('0.5')
 
         nh3_signal_label, nh3_signal_unit = QLabel(self), QLabel(self)
         nh3_signal_label.setText('Sensor potential')
@@ -194,7 +193,7 @@ class MainWindow(QMainWindow):
         self.nh3_cGG_edit = QLineEdit(self)
         self.nh3_cGG_edit.setValidator(QDoubleValidator())
         self.nh3_cGG_edit.setAlignment(Qt.AlignRight)
-        self.nh3_cGG_edit.setText('230.')
+        self.nh3_cGG_edit.setText('230.0')
 
         nh3_alpha_label, nh3_alpha_unit = QLabel(self), QLabel(self)
         nh3_alpha_label.setText('alpha(NH3)')
@@ -206,12 +205,30 @@ class MainWindow(QMainWindow):
 
         # -----------------------
         # General navigation
+        self.load_button = QPushButton('Load', self)
+        self.load_button.setFixedWidth(100)
+        self.inputFileLineEdit = QLineEdit(self)
+        self.inputFileLineEdit.setValidator(QDoubleValidator())
+        self.inputFileLineEdit.setMaximumWidth(300)
+        self.inputFileLineEdit.setAlignment(Qt.AlignRight)
         self.plot_button = QPushButton('Plot', self)
         self.plot_button.setFixedWidth(100)
-        self.clear_button = QPushButton('Clear', self)
-        self.clear_button.setFixedWidth(100)
-        self.save_button = QPushButton('Save', self)
+        self.clearP_button = QPushButton('Clear parameter', self)
+        self.clearP_button.setFixedWidth(150)
+        self.clearF_button = QPushButton('Clear plots', self)
+        self.clearF_button.setFixedWidth(100)
+        self.save_button = QPushButton('Save all', self)
         self.save_button.setFixedWidth(100)
+        self.saveR_button = QPushButton('Save report', self)
+        self.saveR_button.setFixedWidth(100)
+
+        # draw additional "line" to separate load from plot and plot from save
+        vline1 = QFrame()
+        vline1.setFrameShape(QFrame.VLine | QFrame.Raised)
+        vline1.setLineWidth(2)
+        vline2 = QFrame()
+        vline2.setFrameShape(QFrame.VLine | QFrame.Raised)
+        vline2.setLineWidth(2)
 
         # -------------------------------------------------------------------------------------------
         # GroupBoxes to structure the layout
@@ -222,15 +239,22 @@ class MainWindow(QMainWindow):
         vbox_bottom.addWidget(navigation_group)
         navigation_group.setLayout(grid_load)
 
-        grid_load.addWidget(self.plot_button, 0, 0)
-        grid_load.addWidget(self.clear_button, 0, 1)
-        grid_load.addWidget(self.save_button, 0, 2)
+        grid_load.addWidget(self.load_button, 0, 0)
+        grid_load.addWidget(self.inputFileLineEdit, 0, 1)
+        grid_load.addWidget(vline1, 0, 2)
+        grid_load.addWidget(self.plot_button, 0, 3)
+        grid_load.addWidget(self.clearP_button, 0, 4)
+        grid_load.addWidget(self.clearF_button, 0, 5)
+        grid_load.addWidget(vline2, 0, 6)
+        grid_load.addWidget(self.save_button, 0, 7)
+        grid_load.addWidget(self.saveR_button, 0, 8)
 
         # ----------------------------------------------
         # create GroupBox to structure the layout
         general_group = QGroupBox("General Settings")
         general_group.setFixedWidth(250)
         grid_load = QGridLayout()
+        grid_load.setSpacing(5), grid_load.setVerticalSpacing(1)
 
         # add GroupBox to layout and load buttons in GroupBox
         hbox_ltop.addWidget(general_group)
@@ -240,18 +264,22 @@ class MainWindow(QMainWindow):
         grid_load.addWidget(temperature_unit_label, 0, 2)
         grid_load.addWidget(pH_label, 1, 0)
         grid_load.addWidget(self.phrange_edit, 1, 1)
-        grid_load.addWidget(smprate_label, 2, 0)
-        grid_load.addWidget(self.smpgrate_edit, 2, 1)
-        grid_load.addWidget(smprate_unit_label, 2, 2)
+        grid_load.addWidget(tsteady_label, 2, 0)
+        grid_load.addWidget(self.tsteady_edit, 2, 1)
+        grid_load.addWidget(tsteady_unit, 2, 2)
+        grid_load.addWidget(smprate_label, 3, 0)
+        grid_load.addWidget(self.smpgrate_edit, 3, 1)
+        grid_load.addWidget(smprate_unit_label, 3, 2)
 
         general_group.setContentsMargins(1, 15, 15, 1)
         hbox_ltop.addSpacing(10)
 
-    # -----------------------
+        # -----------------------
         # pH Sensor Settings
         phsens_group = QGroupBox("pH Sensor Settings")
         phsens_group.setFixedWidth(300)
         grid_load = QGridLayout()
+        grid_load.setSpacing(5), grid_load.setVerticalSpacing(1)
 
         # add GroupBox to layout and load buttons in GroupBox
         hbox_lmiddle.addWidget(phsens_group)
@@ -273,11 +301,12 @@ class MainWindow(QMainWindow):
         phsens_group.setContentsMargins(1, 15, 15, 1)
         hbox_lmiddle.addSpacing(10)
 
-    # -----------------------
+        # -----------------------
         # NH3 Sensor Settings
         nh3sens_group = QGroupBox("NH3 Sensor Settings")
         nh3sens_group.setFixedWidth(300)
         grid_load = QGridLayout()
+        grid_load.setSpacing(5), grid_load.setVerticalSpacing(1)
 
         # add GroupBox to layout and load buttons in GroupBox
         hbox_lbottom.addWidget(nh3sens_group)
@@ -307,6 +336,7 @@ class MainWindow(QMainWindow):
         # for all parameters - connect LineEdit with function
         self.temperature_edit.editingFinished.connect(self.print_temperature)
         self.phrange_edit.editingFinished.connect(self.print_phrange)
+        self.tsteady_edit.editingFinished.connect(self.print_tsteady)
         self.smpgrate_edit.editingFinished.connect(self.print_samplingrate)
         self.ph_t90_edit.editingFinished.connect(self.print_ph_t90)
         self.ph_signal_edit.editingFinished.connect(self.print_ph_signal)
@@ -319,27 +349,32 @@ class MainWindow(QMainWindow):
         self.nh3_cGG_edit.editingFinished.connect(self.print_nh3_concentration)
         self.nh3_alpha_edit.editingFinished.connect(self.print_nh3_alpha)
 
-    # -------------------------------------------------------------------
-        # connect button with function
-        # !!!TODO: connect button with function - plot, clear, and save
+        # ----------------------------------------------------------------------------------------------------------------
+        # connect buttons in navigation manager with functions
+        self.load_button.clicked.connect(self.load_data)
+        self.plot_button.clicked.connect(self.run_simulation)
+        self.clearP_button.clicked.connect(self.clear_parameters)
+        self.clearF_button.clicked.connect(self.clear_phclaib)
+        self.clearF_button.clicked.connect(self.clear_nh3calib)
+        self.clearF_button.clicked.connect(self.clear_nh3timedrive)
+        self.clearF_button.clicked.connect(self.clear_tantimdrive)
+        self.save_button.clicked.connect(self.save)
+        self.saveR_button.clicked.connect(self.save_report)
 
-    # --------------------------------------------------------------------------------------------
+        # ----------------------------------------------------------------------------------------------------------------
         # Calibration of pH
         self.fig_phcalib, self.ax_phcalib = plt.subplots()
         self.canvas_phcalib = FigureCanvasQTAgg(self.fig_phcalib)
         self.navi_phcalib = NavigationToolbar2QT(self.canvas_phcalib, w, coordinates=False)
-        self.ax_phcalib.set_xlim(0, 15)
-        self.ax_phcalib.set_xlabel('pH value', fontsize=fs)
-        self.ax_phcalib.set_ylabel('Potential [mV]', fontsize=fs)
-        self.fig_phcalib.subplots_adjust(left=0.15, right=0.95, bottom=0.29, top=0.85)
+        self.ax_phcalib.set_xlim(-0, 15)
+        self.ax_phcalib.set_xlabel('pH value')
+        self.ax_phcalib.set_ylabel('Potential [mV]')
+        self.fig_phcalib.subplots_adjust(left=0.15, right=0.95, bottom=0.2, top=0.9)
         sns.despine()
-
-        # connect onclick event with function
-    #     self.fig_phcalib.canvas.mpl_connect('button_press_event', self.onclick_timedrive)
 
         # create GroupBox to structure the layout
         phcalib_group = QGroupBox("pH Sensor Calibration")
-        phcalib_group.setMinimumWidth(200)
+        phcalib_group.setMinimumWidth(220), phcalib_group.setMinimumHeight(320)
         grid_phcalib = QGridLayout()
 
         # add GroupBox to layout and load buttons in GroupBox
@@ -353,16 +388,14 @@ class MainWindow(QMainWindow):
         self.fig_nh3calib, self.ax_nh3calib = plt.subplots()
         self.canvas_nh3calib = FigureCanvasQTAgg(self.fig_nh3calib)
         self.navi_nh3calib = NavigationToolbar2QT(self.canvas_nh3calib, w, coordinates=False)
-        self.ax_nh3calib.set_xlim(0., 100.)
-        self.ax_nh3calib.set_xlabel('alpha [%]', fontsize=fs)
-        self.ax_nh3calib.set_ylabel('Potential [mV]', fontsize=fs)
-        self.fig_nh3calib.subplots_adjust(left=0.15, right=0.95, bottom=0.29, top=0.85)
+        self.ax_nh3calib.set_xlim(-5, 105.)
+        self.ax_nh3calib.set_xlabel('alpha(NH$_3$) [%]')#, fontsize=fs)
+        self.ax_nh3calib.set_ylabel('Potential [mV]')#, fontsize=fs)
+        self.fig_nh3calib.subplots_adjust(left=0.15, right=0.95, bottom=0.2, top=0.9)
         sns.despine()
 
-        # connect onclick event with function
-        # self.fig_nh3calib.canvas.mpl_connect('button_press_event', self.onclick_timedrive)
-
         nh3calib_group = QGroupBox("NH3 Sensor Calibration")
+        nh3calib_group.setMinimumWidth(220), nh3calib_group.setMinimumHeight(320)
         grid_nh3calib = QGridLayout()
 
         # add GroupBox to layout and load buttons in GroupBox
@@ -374,18 +407,18 @@ class MainWindow(QMainWindow):
         # ---------------------------------------------------
         # nh3+nh4 simulation
         self.fig_nh3sim, self.ax_nh3sim = plt.subplots()
+        self.ax_nh3sim_ph = self.ax_nh3sim.twinx()
+
         self.canvas_nh3sim = FigureCanvasQTAgg(self.fig_nh3sim)
         self.navi_nh3sim = NavigationToolbar2QT(self.canvas_nh3sim, w, coordinates=False)
-        self.ax_nh3sim.set_xlabel('Time [s]', fontsize=fs)
-        self.ax_nh3sim.set_ylabel('NH$_3$ / NH$_4^+$ [ppm]', fontsize=fs)
-        self.fig_nh3sim.subplots_adjust(left=0.15, right=0.95, bottom=0.29, top=0.85)
+        self.ax_nh3sim.set_xlabel('Time [s]')#, fontsize=fs)
+        self.ax_nh3sim.set_ylabel('NH$_3$ / NH$_4^+$ [ppm]')#, fontsize=fs)
+
+        self.fig_nh3sim.subplots_adjust(left=0.15, right=0.95, bottom=0.2, top=0.9)
         sns.despine()
 
-        # connect onclick event with function
-        # self.fig_nh3calib.canvas.mpl_connect('button_press_event', self.onclick_timedrive)
-
         nh3sim_group = QGroupBox("NH3 / NH4+ Simulation")
-        nh3sim_group.setMinimumWidth(200)
+        nh3sim_group.setMinimumWidth(220), nh3sim_group.setMinimumHeight(320)
         grid_nh3sim = QGridLayout()
 
         # add GroupBox to layout and load buttons in GroupBox
@@ -398,16 +431,15 @@ class MainWindow(QMainWindow):
         self.fig_tanim, self.ax_tansim = plt.subplots()
         self.canvas_tansim = FigureCanvasQTAgg(self.fig_tanim)
         self.navi_tansim = NavigationToolbar2QT(self.canvas_tansim, w, coordinates=False)
-        self.ax_tansim.set_xlabel('Time [s]', fontsize=fs)
-        self.ax_tansim.set_ylabel('TAN [ppm]', fontsize=fs)
-        self.fig_tanim.subplots_adjust(left=0.15, right=0.95, bottom=0.29, top=0.85)
-        sns.despine()
-
-        # connect onclick event with function
-        # self.fig_nh3calib.canvas.mpl_connect('button_press_event', self.onclick_timedrive)
+        self.ax_tansim_ph = self.ax_tansim.twinx()
+        self.ax_tansim.set_xlabel('Time [s]')#, fontsize=fs)
+        self.ax_tansim.set_ylabel('TAN [ppm]')#, fontsize=fs)
+        self.ax_tansim_ph.set_ylabel('pH', color='gray')#, fontsize=fs)
+        self.fig_tanim.subplots_adjust(left=0.15, right=0.85, bottom=0.2, top=0.9)
+        self.ax_tansim.spines['top'].set_visible(False), self.ax_tansim_ph.spines['top'].set_visible(False)
 
         tansim_group = QGroupBox("Total Ammonia Simulation")
-        tansim_group.setMinimumWidth(200)
+        tansim_group.setMinimumWidth(220), tansim_group.setMinimumHeight(320)
         grid_tansim = QGridLayout()
 
         # add GroupBox to layout and load buttons in GroupBox
@@ -416,82 +448,21 @@ class MainWindow(QMainWindow):
         grid_tansim.addWidget(self.canvas_tansim)
         grid_tansim.addWidget(self.navi_tansim)
 
-    # ---------------------------------------------------------------
-    #     # right side bottom
-    #     vbox_right.addLayout(hbox_bottom)
-    #
-    #     vbox_bottom_left = QVBoxLayout()
-    #     vbox_bottom_right = QVBoxLayout()
-    #     hbox_bottom.addLayout(vbox_bottom_left)
-    #     hbox_bottom.addLayout(vbox_bottom_right)
-    #
-    #     # Plot for histogram (left side in right half of main window)
-    #     self.fig_histogram, self.ax_histogram = plt.subplots()
-    #     self.canvas_histo = FigureCanvasQTAgg(self.fig_histogram)
-    #     self.navi_histo = NavigationToolbar2QT(self.canvas_histo, w)
-    #     self.ax_histogram = plt.gca()
-    #     self.ax_histogram.set_xlim(0, 8)
-    #     self.ax_histogram.set_xticks([0.5, 1.5, 2.5, 3.5, 4.5, 5.5, 6.5, 7.5])
-    #     self.led_selection = ['380 nm', '403 nm', '438 nm', '453 nm', '472 nm', '526 nm', '593 nm', '640 nm']
-    #     self.ax_histogram.set_xticklabels(self.led_selection, rotation=15)
-    #     self.ax_histogram.set_xlabel('Wavelength [nm]')
-    #     self.ax_histogram.set_ylabel('Relative signal intensity [rfu]')
-    #     self.fig_histogram.subplots_adjust(left=0.1, right=0.9, bottom=0.18, top=0.85)
-    #
-    #     # Plot for score plot (right side in right half of main window)
-    #     self.fig_scoreplot = plt.figure()
-    #     if self.threedimensional_plot_checkbox.isChecked():
-    #         # 3D Plot
-    #         self.ax_scoreplot = self.fig_scoreplot.gca(projection='3d')
-    #         self.ax_scoreplot.view_init(elev=16., azim=57)
-    #         self.canvas_score = FigureCanvasQTAgg(self.fig_scoreplot)
-    #         self.navi_score = NavigationToolbar2QT(self.canvas_score, w)
-    #         self.ax_scoreplot = plt.gca()
-    #         self.ax_scoreplot.set_xlabel('LDA 1', fontsize=13, labelpad=10)
-    #         self.ax_scoreplot.set_ylabel('LDA 2', fontsize=13, labelpad=10)
-    #         self.ax_scoreplot.set_zlabel('LDA 3', fontsize=13, labelpad=10)
-    #         self.fig_scoreplot.subplots_adjust(left=0.1, right=0.9, bottom=0.18, top=0.85)
-    #     else:
-    #         # 2D Plot
-    #         self.ax_scoreplot = self.fig_scoreplot.add_subplot(111)
-    #         self.canvas_score = FigureCanvasQTAgg(self.fig_scoreplot)
-    #         self.navi_score = NavigationToolbar2QT(self.canvas_score, w)
-    #         self.ax_scoreplot = plt.gca()
-    #         self.ax_scoreplot.set_xlabel('LDA 1', fontsize=13, labelpad=10)
-    #         self.ax_scoreplot.set_ylabel('LDA 2', fontsize=13, labelpad=10)
-    #         self.fig_scoreplot.subplots_adjust(left=0.10, right=0.9, bottom=0.18, top=0.85)
-    #
-    #     # create GroupBox to structure the layout
-    #     result_histogram_group = QGroupBox("Histogram")
-    #     grid_histogram = QGridLayout()
-    #     result_scoreplot_group = QGroupBox("Score plot")
-    #     grid_scoreplot = QGridLayout()
-    #
-    #     # add GroupBox to layout and load buttons in GroupBox
-    #     vbox_bottom_left.addWidget(result_histogram_group)
-    #     result_histogram_group.setLayout(grid_histogram)
-    #     vbox_bottom_right.addWidget(result_scoreplot_group)
-    #     result_scoreplot_group.setLayout(grid_scoreplot)
-    #
-    #     grid_histogram.addWidget(self.canvas_histo)
-    #     grid_histogram.addWidget(self.navi_histo)
-    #     grid_scoreplot.addWidget(self.canvas_score)
-    #     grid_scoreplot.addWidget(self.navi_score)
-    #
-    #     #self.canvas_histo.setMinimumWidth(500)
-    #     #self.canvas_score.setMinimumWidth(800)
-
+        # -------------------------------------------------------------------------------------------------------------
         self.show()
 
-###################################################################################################################
-# Functions for analysis
-###################################################################################################################
+    # -----------------------------------------------------------------------------------------------------------------
+    # Functions for analysis
+    # ------------------------------------------------------
     # print parameter
     def print_temperature(self):
         print('Temperature: ', self.temperature_edit.text(), 'degC')
 
     def print_phrange(self):
         print('pH range: ', self.phrange_edit.text())
+
+    def print_tsteady(self):
+        print('plateau time for step function: ', self.tsteady_edit.text())
 
     def print_samplingrate(self):
         print('Sampling rate: ', self.smpgrate_edit.text(), 's')
@@ -500,7 +471,7 @@ class MainWindow(QMainWindow):
         print('pH sensor response: ', self.ph_t90_edit.text(), 's')
 
     def print_ph_signal(self):
-        print('pH sensor signal (min, max): ', self.ph_signal_edit.text(), 'mV')
+        print('pH sensor signal (min): ', self.ph_signal_edit.text(), 'mV')
 
     def print_ph_resolution(self):
         print('pH sensor resolution: ', self.ph_res_edit.text(), 'mV')
@@ -526,741 +497,316 @@ class MainWindow(QMainWindow):
     def print_nh3_alpha(self):
         print('NH3 proportion range: ', self.nh3_alpha_edit.text(), '%')
 
+    # ---------------------------------------------------
+    def clear_parameters(self):
+        # re-write default parameters
+        self.temperature_edit.setText('25.')
+        self.phrange_edit.setText('0, 14')
+        self.tsteady_edit.setText('10.')
+        self.smpgrate_edit.setText('1.')
+        self.ph_t90_edit.setText('0.1')
+        self.ph_signal_edit.setText('5.0')
+        self.ph_res_edit.setText('1e-5')
+        self.ph_ref_edit.setText('5e-3')
+        self.nh3_t90_edit.setText('0.5')
+        self.nh3_signal_edit.setText('0.02, 0.09')
+        self.nh3_res_edit.setText('1e-9')
+        self.nh3_pka_edit.setText('9.25')
+        self.nh3_cGG_edit.setText('230.0')
+        self.nh3_alpha_edit.setText('0., 100., 0.01')
 
+    def clear_phclaib(self):
+        self.ax_phcalib.cla()
+        self.ax_phcalib.set_xlim(-0, 15)
+        self.ax_phcalib.set_xlabel('pH value')#, fontsize=fs)
+        self.ax_phcalib.set_ylabel('Potential [mV]')#, fontsize=fs)
+        self.fig_phcalib.subplots_adjust(left=0.15, right=0.95, bottom=0.2, top=0.9)
+        sns.despine()
+        self.fig_phcalib.canvas.draw()
 
-    # def open_sample(self):
-    #     self.fname = QFileDialog.getOpenFileName(self, "Select a measurement file", 'measurement/')[0]
-    #
-    #     if not self.fname:
-    #         return
-    #     self.read_sample_name(self.fname)
-    #
-    # def clear_all(self):
-    #     self.sample_edit.clear()
-    #     self.blank_edit.clear()
-    #     self.prescan_edit.clear()
-    #     self.database_edit.clear()
-    #     self.ex_correction_edit.clear()
-    #     self.em_correction_edit.clear()
-    #     if self.xcoords_prescan:
-    #         self.xcoords_prescan = None
-    #     if self.xcoords:
-    #         self.xcoords.clear()
-    #
-    # def reportInput_blank_correction(self):
-    #     print('blank correction: ', self.blank_cor_checkbox.isChecked())
-    #     return self.blank_cor_checkbox.isChecked()
-    #
-    # def reportInput_external_blank(self):
-    #     print('external blank: ', self.blank_externalfile_checkbox.isChecked())
-    #     return self.blank_externalfile_checkbox.isChecked()
-    #
-    # def reportInput_correction(self):
-    #     print('em-/ex-correction: ', self.correction_checkbox.isChecked())
-    #
-    # def reportInput_led_calibration_fit(self):
-    #     print('led-calibration fit linear:', self.calibration_linearfit_checkbox.isChecked())
-    #     return self.calibration_linearfit_checkbox.isChecked()
-    #
-    # def reportInput_single_peak(self):
-    #     print('single peak evaluation: ', self.singlepeak_detect_checkbox.isChecked())
-    #     return self.singlepeak_detect_checkbox.isChecked()
-    #
-    # def reportInput_priority(self):
-    #     print('Priority for dinophyta: ', self.priority_checkbox.isChecked())
-    #     return self.priority_checkbox.isChecked()
-    #
-    # def reportSampling_evaluation(self):
-    #     print('Sample will be evaluated and plotted: ', self.sampling_checkbox.isChecked())
-    #     return self.sampling_checkbox.isChecked()
-    #
-    # def reportInput_normalize(self):
-    #     print('data normalization: ', self.normalize_checkbox.isChecked())
-    #     return self.normalize_checkbox.isChecked()
-    #
-    # def reportInput_standardize(self):
-    #     print('data standardization: ', self.standardize_checkbox.isChecked())
-    #     return self.standardize_checkbox.isChecked()
-    #
-    # def reportInput_threedimensional(self):
-    #     print('3D plot for score plot: ', self.threedimensional_plot_checkbox.isChecked())
-    #     if self.threedimensional_plot_checkbox.isChecked() is True:
-    #         self.twodimensional_plot_checkbox.setCheckState(False)
-    #     return self.threedimensional_plot_checkbox.isChecked()
-    #
-    # def reportInput_twodimensional(self):
-    #     print('2D plot for score plot: ', self.twodimensional_plot_checkbox.isChecked())
-    #     if self.twodimensional_plot_checkbox.isChecked() is True:
-    #         self.threedimensional_plot_checkbox.setCheckState(False)
-    #     return self.twodimensional_plot_checkbox.isChecked()
-    #
-    # def reportInput_LoD(self):
-    #     print('peak detection with LoD ', self.peak_detect_checkbox.isChecked())
-    #     return self.peak_detect_checkbox.isChecked()
-    #
-    # def print_pumprate(self):
-    #     print('Pumprate: ', self.pumprate_edit.text(), 'mL/min')
-    #     return self.pumprate_edit.text()
-    #
-    # def print_separation(self):
-    #     if self.separation_edit.text() == 'phylum' or self.separation_edit.text() == 'order':
-    #         print('Separation level: ', self.separation_edit.text())
-    #         return self.separation_edit.text()
-    #     elif self.separation_edit.text() == 'family' or self.separation_edit.text() == 'order':
-    #         print('Separation level: ', self.separation_edit.text())
-    #         return self.separation_edit.text()
-    #     else:
-    #         separation_level_failed = QMessageBox()
-    #         separation_level_failed.setIcon(QMessageBox.Information)
-    #         separation_level_failed.setText("Invalid separation level!")
-    #         separation_level_failed.setInformativeText("Choose either 'phylum', 'class', 'order' or 'family' ... ")
-    #         separation_level_failed.setWindowTitle("Error!")
-    #         separation_level_failed.exec_()
-    #         return
-    #
-    # def print_limit(self):
-    #     print('Limit for score plot: ', self.limit_edit.text())
-    #     return self.limit_edit.text()
-    #
-    # def onclick_timedrive(self, event):
-    #     modifiers = QApplication.keyboardModifiers()
-    #     if modifiers != Qt.ControlModifier:  # change selected range
-    #         return
-    #     if len(self.xcoords) >= 4:
-    #         return
-    #     if event.xdata == None:
-    #         if len(self.xcoords) < 2:
-    #             event.xdata = self.loaded_data['l_corr'].index.max()
-    #         else:
-    #             event.xdata = 0
-    #     self.xcoords.append(event.xdata)
-    #     self.ax_timedrive.vlines(x=self.xcoords, ymin=self.loaded_data['l_corr'].min().min(),
-    #                              ymax=self.loaded_data['l_corr'].max().max(), lw=0.5)
-    #     if len(self.xcoords) == 2:
-    #         self.ax_timedrive.axvspan(self.xcoords[0], self.xcoords[1], color='grey', alpha=0.3)
-    #     elif len(self.xcoords) == 4:
-    #         self.ax_timedrive.axvspan(self.xcoords[0], self.xcoords[1], color='grey', alpha=0.3)
-    #         self.ax_timedrive.axvspan(self.xcoords[2], self.xcoords[3], color='grey', alpha=0.3)
-    #     self.fig_timedrive.canvas.draw()
-    #
-    # def plot_timedrive(self, df, name, date, ax, f, unit):
-    #     color_LED = []
-    #     for i in df.columns:
-    #         color_LED.append(led_color_dict[i])
-    #
-    #     # plotting spectra
-    #     ylim_max = pd.DataFrame(np.zeros(shape=(len(df.columns), 1)), index=df.columns).T
-    #     ylim_min = pd.DataFrame(np.zeros(shape=(len(df.columns), 1)), index=df.columns).T
-    #
-    #     for c, p in zip(color_LED, df):
-    #         if df[p].dropna().empty is True:
-    #             df[p][np.isnan(df[p])] = 0
-    #             df[p].plot(ax=ax, color=c, linewidth=1.75)
-    #         else:
-    #             df[p].dropna().plot(ax=ax, color=c, label=p, linewidth=1.75)
-    #             ylim_max[p] = df[p].dropna().max()
-    #             ylim_min[p] = df[p].dropna().min()
-    #
-    #     # General layout-stuff
-    #     ax.set_xlabel('Time [s]')
-    #     ax.set_ylabel('Rel. Fluorescence intensity [{}]'.format(unit))
-    #     ax.legend(loc=0, ncol=1, frameon=True, fancybox=True, framealpha=0.5,
-    #               fontsize=9) # 'upper center', bbox_to_anchor=(1.08, 1.)
-    #
-    #     # Define plotting area. Default is 2 but if max value is higher it has to be rearranged
-    #     x_max = df.index[-1] * 1.05
-    #     x_min = np.abs(df.index[0]) - np.abs(df.index[-1])*0.05
-    #     ax.set_xlim(x_min, x_max)
-    #
-    #     y_max = ylim_max.max(axis=1).values[0] * 1.05
-    #     y_min = ylim_min.min(axis=1).values[0] * 1.05
-    #     ax.set_ylim(y_min, y_max)
-    #     ax.set_title("{} {}/{}/{} {}:{}h - \n Select time range for sample and "
-    #                  "blank.".format(name, date[6:8], date[4:6], date[:4], date[8:10], date[10:12]),
-    #                  fontsize=11)
-    #
-    #     f.tight_layout()
-    #     f.canvas.draw()
-    #
-    # def plot_histogram(self, mean, ax, f):
-    #     # plot histogram: Relative intensity @ different excitation LEDs.
-    #     mean = mean.sort_index()
-    #
-    #     # prepare general information about the sample and the setup
-    #     LED_color = []
-    #     LED_wl = []
-    #     for i in mean.index:
-    #         if type(i) == str:
-    #             if len(i.split(' ')) == 1:
-    #                 # led as string without 'nm'
-    #                 j = i + ' nm'
-    #             else:
-    #                 # led with 'nm'
-    #                 j = i
-    #         else:
-    #             j = str(i) + ' nm'
-    #         LED_wl.append(j)
-    #         LED_color.append(led_color_dict[j])
-    #
-    #     mean.index = LED_wl
-    #
-    #     # normalize mean
-    #     means = mean / mean.max()
-    #     for i in means.index:
-    #         if (means.ix[i, :].values[0]) < 0:
-    #             means.ix[i, :].values[0] = 0
-    #
-    #     self.led_total = pd.DataFrame(self.led_selection)
-    #     x = []
-    #     for i in mean.index:
-    #         x.append(self.led_total[self.led_total[0] == i].index[0])
-    #
-    #     for k, l in enumerate(mean.index):
-    #         ax.bar(x[k]+0.5, means.ix[l, :], width=0.9, color=LED_color[k])
-    #     ax = plt.gca()
-    #     ax.set_xticks([0.5, 1.5, 2.5, 3.5, 4.5, 5.5, 6.5, 7.5])
-    #     ax.set_xticklabels(mean.index)
-    #     ax.xaxis.grid(False)
-    #     plt.setp(ax.get_xticklabels(), rotation=45, ha='center')
-    #
-    #     ax.set_xlabel('Wavelength [nm]')
-    #     ax.set_ylabel('Relative signal intensity [rfu]')
-    #     f.tight_layout()
-    #
-    #     f.canvas.draw()
-    #
-    # def plot_distribution_2d(self, f, ax, d, df_score, color, alg_group, alg_phylum, phyl_group, separation):
-    #     ax.cla()
-    #     # preparation of figure plot
-    #     if ax is None:
-    #         f, ax = plt.subplots()
-    #
-    #     # plotting the centers of each algal class
-    #     for el in d.index:
-    #         ax.scatter(d.ix[el, 0], d.ix[el, 1], facecolor=color[el], edgecolor='k', s=60)
-    #
-    #     # calculate the standard deviation within one class to built up a solid (sphere with 3 different radii)
-    #     # around the centroid using spherical coordinates
-    #     for i in d.index:
-    #         # replace sample name (phyl_group.index) with phylum name (in phyl_group['phylum_label'])
-    #         phyl = alg_group[alg_group[separation] == i]['phylum'].values[0]
-    #         if phyl in phyl_group['phylum_label'].values:
-    #             pass
-    #         else:
-    #             phyl_group.ix[i, 'phylum_label'] = phyl
-    #             phyl_group.ix[i, 'color'] = alg_phylum.ix[phyl, :].values
-    #
-    #         rx = np.sqrt(d['LDA1var'].ix[i])
-    #         ry = np.sqrt(d['LDA2var'].ix[i])
-    #         c_x = d.ix[i]['LDA1']
-    #         c_y = d.ix[i]['LDA2']
-    #         ells = Ellipse(xy=[c_x, c_y], width=rx, height=ry, angle=0, edgecolor=color[i], lw=1, facecolor=color[i],
-    #                        alpha=0.6, label=i)
-    #         ax.add_artist(ells)
-    #
-    #         ells2 = Ellipse(xy=[c_x, c_y], width=2*rx, height=2*ry, angle=0, edgecolor=color[i], lw=1,
-    #                         facecolor=color[i], alpha=0.4)
-    #         ax.add_artist(ells2)
-    #
-    #         ells3 = Ellipse(xy=[c_x, c_y], width=3*rx, height=3*ry, angle=0, edgecolor=color[i], lw=0.5,
-    #                         facecolor=color[i], alpha=0.1)
-    #         ax.add_artist(ells3)
-    #
-    #     # patch = pd.DataFrame(np.zeros(shape=(len(phyl_group), 2)), index=phyl_group.index)
-    #     patch = []
-    #     for i in phyl_group.index:
-    #         patch.append(mpatches.Patch(color=phyl_group.ix[i, 'color'][0], label=phyl_group.ix[i, 'phylum_label']))
-    #         ax.legend(handles=patch, loc="upper center", bbox_to_anchor=(1.2, 0.9), frameon=True, fontsize=11)
-    #
-    #     plt.setp(ax.get_xticklabels(), fontsize=13)
-    #     plt.setp(ax.get_yticklabels(), fontsize=13)
-    #     ax.set_xlabel('LDA1', fontsize=13, labelpad=5)
-    #     ax.set_ylabel('LDA2', fontsize=13, labelpad=5)
-    #     plt.title('')
-    #
-    #     # plotting the sample scores
-    #     if self.sampling_checkbox.isChecked():
-    #         for i in range(len(df_score.T)):
-    #             ax.plot(df_score.ix[0, 0], df_score.ix[1, 0], marker='^', markersize=14, color='orangered', label='')
-    #     f.subplots_adjust(left=0.1, right=0.75, bottom=0.18, top=0.85)
-    #
-    #     f.canvas.draw()
-    #
-    # def plot_distribution_3d(self, f, ax, d, df_score, color, alg_group, alg_phylum, phyl_group, separation):
-    #     ax.cla()
-    #     # preparation of figure plot
-    #     if ax is None:
-    #         f = plt.figure()
-    #         ax = f.gca(projection='3d')
-    #         ax.set_aspect('auto')
-    #     # initial view of score plot to enhance the separation of algae and cyanos
-    #     ax.view_init(elev=19., azim=-67)
-    #
-    #     # plotting the centers of each algal class
-    #     for el in d.index:
-    #         ax.scatter(d.ix[el, 0], d.ix[el, 1], d.ix[el, 2], marker='.', color='k', s=60)
-    #
-    #     # calculate the standard deviation within one class to built up a solid (sphere with 3 different radii)
-    #     # around the centroid using spherical coordinates
-    #     for i in d.index:
-    #         # replace sample name (phyl_group.index) with phylum name (in phyl_group['phylum_label'])
-    #         phyl = alg_group[alg_group[separation] == i]['phylum'].values[0]
-    #         if phyl in phyl_group['phylum_label'].values:
-    #             pass
-    #         else:
-    #             phyl_group.ix[i, 'phylum_label'] = phyl
-    #
-    #             phyl_group.ix[i, 'color'] = alg_phylum.ix[phyl, :].values
-    #
-    #         rx = np.sqrt(d['LDA1var'].ix[i])
-    #         ry = np.sqrt(d['LDA2var'].ix[i])
-    #         rz = np.sqrt(d['LDA3var'].ix[i])
-    #         c_x = d.ix[i]['LDA1']
-    #         c_y = d.ix[i]['LDA2']
-    #         c_z = d.ix[i]['LDA3']
-    #
-    #         u, v = np.mgrid[0:2 * np.pi:10j, 0:np.pi:20j]
-    #         x = rx * np.cos(u) * np.sin(v) + c_x
-    #         y = ry * np.sin(u) * np.sin(v) + c_y
-    #         z = rz * np.cos(v) + c_z
-    #         ax.plot_wireframe(x, y, z, color=color[i], alpha=0.5, linewidth=1, label=phyl)
-    #
-    #         x1 = 2 * rx * np.cos(u) * np.sin(v) + c_x
-    #         y1 = 2 * ry * np.sin(u) * np.sin(v) + c_y
-    #         z1 = 2 * rz * np.cos(v) + c_z
-    #         ax.plot_wireframe(x1, y1, z1, color=color[i], alpha=0.2, linewidth=1)
-    #
-    #         x2 = 3 * rx * np.cos(u) * np.sin(v) + c_x
-    #         y2 = 3 * ry * np.sin(u) * np.sin(v) + c_y
-    #         z2 = 3 * rz * np.cos(v) + c_z
-    #         ax.plot_wireframe(x2, y2, z2, color=color[i], alpha=0.15, linewidth=0.5)
-    #
-    #     patch = []
-    #     for i in phyl_group.index:
-    #         patch.append(mpatches.Patch(color=phyl_group.ix[i, 'color'][0], label=phyl_group.ix[i, 'phylum_label']))
-    #         ax.legend(handles=patch, loc="upper center", bbox_to_anchor=(0., 0.9), frameon=True, fancybox=True,
-    #                   fontsize=10)
-    #
-    #     plt.setp(ax.get_xticklabels(), va='center', ha='left', fontsize=13)
-    #     plt.setp(ax.get_yticklabels(), va='center', ha='left', fontsize=13)
-    #     plt.setp(ax.get_zticklabels(), va='center', fontsize=13)
-    #
-    #     ax.set_xlabel('LDA1', fontsize=14, labelpad=16, rotation=-2)
-    #     ax.set_ylabel('LDA2', fontsize=14, labelpad=14, rotation=18)
-    #     ax.set_zlabel('LDA3', fontsize=14, labelpad=10, rotation=90)
-    #     plt.title(' ')
-    #
-    #     # plotting the sample scores
-    #     if self.sampling_checkbox.isChecked():
-    #         for i in range(len(df_score.T)):
-    #             ax.scatter(df_score.ix[0, 0], df_score.ix[1, 0], df_score.ix[2, 0], marker='^', s=300,
-    #                        color='orangered', label='')
-    #
-    #     f.subplots_adjust(left=0.1, right=0.9, bottom=0.06, top=0.99)
-    #
-    #     f.canvas.draw()
+    def clear_nh3calib(self):
+        self.ax_nh3calib.cla()
+        self.ax_nh3calib.set_xlim(-5, 105.)
+        self.ax_nh3calib.set_xlabel('alpha(NH$_3$) [%]')#, fontsize=fs)
+        self.ax_nh3calib.set_ylabel('Potential [mV]')#, fontsize=fs)
+        self.fig_nh3calib.subplots_adjust(left=0.15, right=0.95, bottom=0.2, top=0.9)
+        sns.despine()
+        self.fig_nh3calib.canvas.draw()
 
-#################################################################################################
-#   Load data and select range for sample and blank
-#################################################################################################
-    def load_timedrive(self):
-        self.message.clear()
-        self.message.setText(' ')
-        self.report.clear()
-        self.report_sup.clear()
-        self.ax_timedrive.cla()
-        self.ax_timedrive.set_xlim(0, 10)
-        self.ax_timedrive.set_xlabel('Time [s]')
-        self.ax_timedrive.set_ylabel('Rel. intensity [pW]')
-        self.fig_timedrive.canvas.draw()
-        self.ax_histogram.cla()
-        self.ax_histogram.set_xlim(0, 8)
-        self.ax_histogram.set_xticks([0.5, 1.5, 2.5, 3.5, 4.5, 5.5, 6.5, 7.5])
-        self.ax_histogram.set_xticklabels(self.led_selection, rotation=15)
-        self.ax_histogram.set_xlabel('Wavelength [nm]')
-        self.ax_histogram.set_ylabel('Relative signal intensity [rfu]')
-        self.fig_histogram.canvas.draw()
+    def clear_nh3timedrive(self):
+        self.ax_nh3sim.cla()
+        self.ax_nh3sim.set_xlabel('Time [s]')#, fontsize=fs)
+        self.ax_nh3sim.set_ylabel('NH$_3$ / NH$_4^+$ [ppm]')#, fontsize=fs)
+        self.fig_nh3sim.subplots_adjust(left=0.15, right=0.95, bottom=0.2, top=0.9)
+        sns.despine()
+        self.fig_nh3sim.canvas.draw()
 
-        if self.threedimensional_plot_checkbox.isChecked():
-            # 3D Plot redrawing
-            self.ax_scoreplot.cla()
-            self.fig_scoreplot.clear()
-            self.ax_scoreplot = self.fig_scoreplot.gca(projection='3d')
-            # self.ax_scoreplot.set_aspect('normal')
-            self.ax_scoreplot.set_xlabel('LDA 1', fontsize=13, labelpad=10)
-            self.ax_scoreplot.set_ylabel('LDA 2', fontsize=13, labelpad=10)
-            self.ax_scoreplot.set_zlabel('LDA 3', fontsize=13, labelpad=10)
-            self.fig_scoreplot.subplots_adjust(left=0.1, right=0.9, bottom=0.18, top=0.85)
-            self.fig_scoreplot.canvas.draw()
-        else:
-            # 2D Plot activated
-            self.ax_scoreplot.cla()
-            self.fig_scoreplot.clear()
-            self.ax_scoreplot = self.fig_scoreplot.add_subplot(111)
-            self.ax_scoreplot.set_xlabel('LDA 1', fontsize=13, labelpad=10)
-            self.ax_scoreplot.set_ylabel('LDA 2', fontsize=13, labelpad=10)
-            self.fig_scoreplot.subplots_adjust(left=0.12, right=0.9, bottom=0.18, top=0.85)
-            self.fig_scoreplot.canvas.draw()
+    def clear_tantimdrive(self):
+        self.ax_tansim.cla()
+        self.ax_tansim_ph.cla()
+        self.ax_tansim.set_xlabel('Time [s]')#, fontsize=fs)
+        self.ax_tansim.set_ylabel('TAN [ppm]')#, fontsize=fs)
+        self.ax_tansim_ph.set_ylabel('pH', color='gray')#, fontsize=fs)
+        self.fig_tanim.subplots_adjust(left=0.15, right=0.85, bottom=0.2, top=0.9)
+        self.ax_tansim.spines['top'].set_visible(False), self.ax_tansim_ph.spines['top'].set_visible(False)
+        self.ax_tansim_ph.spines['right'].set_visible(True)
 
-        # select if pre-scanned data or raw data are analysed
-        if self.sample_edit.toPlainText():
-            # raw data analysis
-            self.prescan_edit.clear()
-            self.fname_prescan = None
-            self.xcoords_prescan = None
+        self.fig_tanim.canvas.draw()
 
-        elif self.prescan_edit.toPlainText():
-            # already pre-scanned data are analysed
-            self.sample_edit.clear()
-            self.fname_sample = None
-            self.xcoords.clear()
-            self.correction_checkbox.setCheckState(False)
-            self.calibration_linearfit_checkbox.setCheckState(False)
+    # ---------------------------------------------------
+    def load_data(self):
+        # opens a dialog window in the current path
+        fname, filter = QFileDialog.getOpenFileName(self, "Select specific txt file for temperature compensation",
+                                                    "", "Text files (*.txt *.csv *xls)")
+        if fname:
+            self.inputFileLineEdit.setText(fname)
+            print('now do something with this file')
+            df_general, df_ph, df_nh3 = bs.load_data(fname)
 
-        # find sample filename
-        try:
-            self.fname
-        except:
-            try:
-                # if pre-scanned data are analysed
-                self.fname_prescan
-            except:
-                run_sample_load_failed = QMessageBox()
-                run_sample_load_failed.setIcon(QMessageBox.Information)
-                run_sample_load_failed.setText("Sample file is missing!")
-                run_sample_load_failed.setInformativeText("Choose a specific sample file for analysis or choose an "
-                                                          "already analysed prescan file.")
-                run_sample_load_failed.setWindowTitle("Error!")
-                run_sample_load_failed.exec_()
-                return
+            print(df_general)
+            # set parameter to run the simulation
+            self.temperature_edit.setText(df_general.loc['Temperature', 'values'])
+            s = df_nh3.loc['pH range', 'values'][1:-1]
+            self.phrange_edit.setText(s)
+            self.tsteady_edit.setText(df_general.loc['Plateau time', 'values'])
+            self.smpgrate_edit.setText(df_general.loc['sampling rate'].values[0])
 
-        # if data should be corrected
-        if self.correction_checkbox.isChecked() is True:
-            correction = True
-            # if correction is chosen, you need the em- and ex- correction files!
-            # device for emission correction
-            try:
-                self.number_em  # number 0, 1, 2, 3
-            except:
-                run_correction_em_failed = QMessageBox()
-                run_correction_em_failed.setIcon(QMessageBox.Information)
-                run_correction_em_failed.setText("File for emission correction is missing!")
-                run_correction_em_failed.setInformativeText("Choose a correction file for analysis.")
-                run_correction_em_failed.setWindowTitle("Error!")
-                run_correction_em_failed.exec_()
-                return
+            self.ph_t90_edit.setText(df_ph.loc['t90', 'values'])
+            self.ph_signal_edit.setText(df_ph.loc['background signal', 'values'])
+            self.ph_res_edit.setText(df_ph.loc['resolution', 'values'])
+            self.ph_ref_edit.setText(df_ph.loc['E0', 'values'])
 
-            # excitation correction
-            # linear fit between 30-50mA or whole current between 9-97mA
-            if self.calibration_linearfit_checkbox.isChecked() is True:
-                full_calibration = False
+            self.nh3_t90_edit.setText(df_nh3.loc['response time', 'values'])
+            s = df_nh3.loc['signal min', 'values'] + ', ' + df_nh3.loc['signal max', 'values']
+            self.nh3_signal_edit.setText(s)
+            self.nh3_res_edit.setText(df_nh3.loc['resolution', 'values'])
+            self.nh3_pka_edit.setText(df_nh3.loc['pKa', 'values'])
+            self.nh3_cGG_edit.setText(df_general.loc['GGW concentration', 'values'])
+            self.nh3_alpha_edit.setText(df_nh3.loc['nh3 range', 'values'][1:-1])
+
+    def save(self):
+        # opens window in current path. User input to define file name
+        fname_save = QFileDialog.getSaveFileName(self, 'Save File')[0]
+
+        if fname_save:
+            if '.txt' in fname_save or '.csv' in fname_save:
+                pass
             else:
-                full_calibration = True
+                fname_save = fname_save + '.txt'
 
-            if self.ex_correction_edit.toPlainText():
-                # manual choice of correction file!
-                # check if the correct file was chosen (spectrum; not reference)
-                if self.fname_ex.split('/')[-1].split('_')[4] == 'reference':
-                    self.message.append('Wrong file for LED correction was chosen! '
-                                        'Using spectrum correction instead of reference correction ...')
-                    fname_ex_corr = self.fname_ex.split('reference')[0] + 'spectrum' + \
-                                    self.fname_ex.split('reference')[1]
-                    kappa_spec = fname_ex_corr
+            # check whether we have data to save
+            try:
+                if self.dic_sens_record:
+                    # save output now
+                    output = bs.save_report(para_meas=self.para_meas, sensor_ph=self.sensor_ph, dtarget=self.dic_target,
+                                            sensor_nh3=self.sensor_nh3, dsens_record=self.dic_sens_record)
+                    output.to_csv(fname_save, sep='\t', header=None)
+
+                    # save figures in separate folder
+                    for f in self.dic_figures.keys():
+                        figure_name = fname_save + '_Graph-' + '-'.join(f.split(' ')) + '.'
+                        for t in save_type:
+                            self.dic_figures[f].savefig(figure_name + t, dpi=300)
                 else:
-                    kappa_spec = self.fname_ex
+                    msgBox = QMessageBox()
+                    msgBox.setIcon(QMessageBox.Information)
+                    msgBox.setText("Simulate before saving")
+                    msgBox.setWindowTitle("Warning")
+                    msgBox.setStandardButtons(QMessageBox.Ok | QMessageBox.Cancel)
 
-            else:
-                # automatic choice of correction file
-                self.message.append('No specific file for excitation correction is chosen. Choose automatically ...')
-                kappa_spec = None
-        else:
-            # No excitation correction
-            correction = False
-            device = None
-            kappa_spec = None
-            self.number_em = 'device-1'
-            full_calibration = False
+                    returnValue = msgBox.exec()
+                    if returnValue == QMessageBox.Ok:
+                        pass
+            except NameError:
+                msgBox = QMessageBox()
+                msgBox.setIcon(QMessageBox.Information)
+                msgBox.setText("Simulate before saving")
+                msgBox.setWindowTitle("Warning")
+                msgBox.setStandardButtons(QMessageBox.Ok | QMessageBox.Cancel)
 
-        # pump rate either from file or from GUI
-        if not self.pumprate_edit.text():
-            self.message.append("No external pump rate defined. Take information from header!")
-            pumprate = None
-        else:
-            pumprate = float(self.pumprate_edit.text())
-
-        # no additional offset compensation when database is updated
-        additional = False
-
-        # single event evaluation
-        # !! TODO: Include single peak evaluation!
-        if self.singlepeak_detect_checkbox.isChecked() is True:
-            single_events = True
-        else:
-            single_events = False
-
-        # peak_detection means LoD is used
-        if self.peak_detect_checkbox.isChecked() is True:
-            peak_detection = True
-        else:
-            peak_detection = False
-
-        # other parameter not used in the normal analysis
-        ampli = None
-        factor = 1
-
-        # blank_corr of data
-        if self.blank_cor_checkbox.isChecked() is True:
-            blank_correction = True
-        else:
-            blank_correction = False
-
-        # use external file instead of blank stored in the header
-        if self.blank_externalfile_checkbox.isChecked() is True:
-            try:
-                self.fname_blank
-            except:
-                run_blank_external_failed = QMessageBox()
-                run_blank_external_failed.setIcon(QMessageBox.Information)
-                run_blank_external_failed.setText("File for external blank correction is missing!")
-                run_blank_external_failed.setInformativeText("Choose an external blank file for analysis.")
-                run_blank_external_failed.setWindowTitle("Error!")
-                run_blank_external_failed.exec_()
-                return
-            # blank is not (ex- or em-)corrected so far
-            [blank, header_bl, unit_bl] = alg.read_rawdata(filename=self.fname_blank, additional=additional, co=None,
-                                                           factor=factor, blank_corr=blank_correction,
-                                                           blank_mean_ex=None, blank_std_ex=None, plot_raw=False)
-            # convert the blank in nW
-            if unit_bl == 'nW':
-                blank_mean_ex =blank.mean().tolist()
-                blank_std_ex = blank.std().tolist()
-            elif unit_bl == 'pW':
-                blank_mean_ex =blank.mean().tolist() / 1000
-                blank_std_ex = blank.std().tolist() / 1000
-                unit_bl = 'nW'
-            elif unit_bl == 'µW':
-                blank_mean_ex =blank.mean().tolist() * 1000
-                blank_std_ex = blank.std().tolist() * 1000
-                unit_bl = 'nW'
-            else:
-                self.message.append('The blank is unusually high! Please check the blank ....')
-                return
-        else:
-            blank_mean_ex = None
-            blank_std_ex = None
-
-        # selection of xcoords depending on sample type
-        # -----------------------------------------------------------------------------------------------------------
-        # RAW DATA ANALYSIS
-        # -----------------------------------------------------------------------------------------------------------
-        if self.sample_edit.toPlainText() and not self.prescan_edit.toPlainText():
-            # raw data do not have a x-coord selection. the xcoord prescan should be empty
-            if self.xcoords_prescan:
-                self.xcoords_prescan = None
-            if self.xcoords:
-                self.xcoords.clear()
-
-            print(self.name, self.number_em.split('-')[1], kappa_spec, pumprate, ampli)
-            print(correction, full_calibration, blank_correction, factor)
-
-            # Load data and correct them with prescan_load_file function.
-            [l, l_corr, header, firstline, current, date, self.sample_name, blank_mean, blank_std, blank_corrected,
-             rg9_sample, rg665_sample, volume, pumprate, unit, unit_corr, unit_bl,
-             path] = algae_analysis.prescan_load_file(filename=self.fname, device=self.number_em.split('-')[1],
-                                                      kappa_spec=kappa_spec, pumprate=pumprate, ampli=ampli,
-                                                      correction=correction, full_calibration=full_calibration,
-                                                      blank_corr=blank_correction, factor=factor,
-                                                      blank_mean_ex=blank_mean_ex,
-                                                      blank_std_ex=blank_std_ex, additional=additional)
-
-            self.led_total = l.columns
-            # Dataframe reduction for analysis according to selected LEDs
-            self.led_used = algae_analysis.led_reduction(LED380_checkbox=self.LED380_checkbox.isChecked(),
-                                                         LED403_checkbox=self.LED403_checkbox.isChecked(),
-                                                         LED438_checkbox=self.LED438_checkbox.isChecked(),
-                                                         LED453_checkbox=self.LED453_checkbox.isChecked(),
-                                                         LED472_checkbox=self.LED472_checkbox.isChecked(),
-                                                         LED526_checkbox=self.LED526_checkbox.isChecked(),
-                                                         LED593_checkbox=self.LED593_checkbox.isChecked(),
-                                                         LED640_checkbox=self.LED640_checkbox.isChecked())
-
-            l_red = pd.DataFrame(np.zeros(shape=(len(l.index), 0)), index=l.index)
-            l_corr_red = pd.DataFrame(np.zeros(shape=(len(l_corr.index), 0)), index=l_corr.index)
-            for i in l.columns:
-                if self.led_used.ix[0, i] == True:
-                    l_red.ix[:, i] = l.ix[:, i]
-            for i in l_corr.columns:
-                if self.led_used.ix[0, i] == True:
-                    l_corr_red.ix[:, i] = l_corr.ix[:, i]
-            # sample datas are sorted
-            l_corr_red = l_corr_red.sort_index(axis=1)
-
-            # Store parameter for further evaluation
-            self.loaded_data = {'l': l_red, 'l_corr': l_corr_red, 'header': header, 'firstline': firstline,
-                                'current': current, 'date': date, 'name': self.sample_name, 'blank_mean': blank_mean,
-                                'blank_std': blank_std, 'rg9_sample': rg9_sample, 'rg665_sample': rg665_sample,
-                                'volume': volume, 'path': path, 'full_calibration': full_calibration,
-                                'kappa_spec': kappa_spec, 'correction': correction,
-                                'device': self.number_em.split('-')[1], 'blank_corr': blank_correction,
-                                'peak_detection': peak_detection, 'additional': additional, 'unit': unit_corr,
-                                'pumprate': pumprate, 'unit_blank': unit_bl}
-
-            # Plotting corrected data to select the time-range for sample and blank. Time-range stored in xcoords.
-            self.plot_timedrive(df=self.loaded_data['l_corr'], name=self.loaded_data['name'],
-                                date=self.loaded_data['date'],
-                                f=self.fig_timedrive, ax=self.ax_timedrive, unit=unit)
-
-        # -----------------------------------------------------------------------------------------------------------
-        # PRESCANNED DATA ANALYSIS
-        # -----------------------------------------------------------------------------------------------------------
-        elif self.prescan_edit.toPlainText() and not self.sample_edit.toPlainText():
-            # Use histogram
-            self.message.append('Already pre-scanned data chosen. Apply LDA...')
-
-            [led_mean, self.sample_name, self.cur, self.ampli, volume, LoD, counted_cells, unit,
-             date] = algae_analysis.processed_data_load_file(self.fname_prescan)
-
-            # Dataframe reduction for analysis according to selected LEDs
-            self.led_used = algae_analysis.led_reduction(LED380_checkbox=self.LED380_checkbox.isChecked(),
-                                                         LED403_checkbox=self.LED403_checkbox.isChecked(),
-                                                         LED438_checkbox=self.LED438_checkbox.isChecked(),
-                                                         LED453_checkbox=self.LED453_checkbox.isChecked(),
-                                                         LED472_checkbox=self.LED472_checkbox.isChecked(),
-                                                         LED526_checkbox=self.LED526_checkbox.isChecked(),
-                                                         LED593_checkbox=self.LED593_checkbox.isChecked(),
-                                                         LED640_checkbox=self.LED640_checkbox.isChecked())
-
-            # sample reduction
-            self.led_mean_red = pd.DataFrame(np.zeros(shape=(0, len(led_mean.columns))),
-                                             columns=led_mean.columns)
-            for i in self.led_used.columns:
-                if self.led_used.ix[0, i] == True:
-                    self.led_mean_red.ix[i, self.led_mean_red.columns[0]] =\
-                        led_mean.ix[i[:3], led_mean.columns[0]]
-                else:
+                returnValue = msgBox.exec()
+                if returnValue == QMessageBox.Ok:
                     pass
 
-            sample_name = self.fname_prescan.split('.')[0].split('/')[-1]
-            path = self.fname_prescan.split('.')[0][:-len(sample_name)]
-            self.plot_histogram(mean=self.led_mean_red, f=self.fig_histogram, ax=self.ax_histogram)
+    def save_report(self):
+        # opens window in current path. User input to define file name
+        fname_save = QFileDialog.getSaveFileName(self, 'Save File')[0]
 
-            self.loaded_data = {'full_calibration': full_calibration, 'kappa_spec': kappa_spec, 'volume': volume,
-                                'correction': correction, 'device': self.number_em.split('-')[1], 'date': date,
-                                'blank_corr': blank_correction, 'peak_detection': peak_detection, 'LoD': LoD,
-                                'unit': unit, 'additional': additional, 'pumprate': pumprate, 'path': path,
-                                'counted_cells': counted_cells}
+        if fname_save:
+            if '.txt' in fname_save or '.csv' in fname_save:
+                pass
+            else:
+                fname_save = fname_save + '.txt'
 
-        elif self.prescan_edit.toPlainText() and self.sample_edit.toPlainText():
-            run_both_sample_failed = QMessageBox()
-            run_both_sample_failed.setIcon(QMessageBox.Information)
-            run_both_sample_failed.setText("Select just one sample file!")
-            run_both_sample_failed.setInformativeText("Either raw data with time drive or already processed sample "
-                                                      "file")
-            run_both_sample_failed.setWindowTitle("Too many input!")
-            run_both_sample_failed.exec_()
-        else:
-            run_missing_sample_failed = QMessageBox()
-            run_missing_sample_failed.setIcon(QMessageBox.Information)
-            run_missing_sample_failed.setText("Choose sample file!")
-            run_missing_sample_failed.setInformativeText("Either raw data or already processed sample file")
-            run_missing_sample_failed.setWindowTitle("Missing input!")
-            run_missing_sample_failed.exec_()
-            return
+            # check whether we have data to save
+            try:
+                if self.dic_sens_record:
+                    # save output now
+                    output = bs.save_report(para_meas=self.para_meas, sensor_ph=self.sensor_ph, dtarget=self.dic_target,
+                                            sensor_nh3=self.sensor_nh3, dsens_record=self.dic_sens_record)
+                    output.to_csv(fname_save, sep='\t', header=None)
 
-        self.run_button.setEnabled(True)
+                else:
+                    msgBox = QMessageBox()
+                    msgBox.setIcon(QMessageBox.Information)
+                    msgBox.setText("Simulate before saving")
+                    msgBox.setWindowTitle("Warning")
+                    msgBox.setStandardButtons(QMessageBox.Ok | QMessageBox.Cancel)
 
+                    returnValue = msgBox.exec()
+                    if returnValue == QMessageBox.Ok:
+                        pass
+            except NameError:
+                msgBox = QMessageBox()
+                msgBox.setIcon(QMessageBox.Information)
+                msgBox.setText("Simulate before saving")
+                msgBox.setWindowTitle("Warning")
+                msgBox.setStandardButtons(QMessageBox.Ok | QMessageBox.Cancel)
 
-#################################################################################################
-#   Run analysis
-#################################################################################################
-    def run_analysis(self):
-        self.message.clear()
-        self.report.clear()
-        self.report_sup.clear()
-        if self.xcoords:
-            # xcoords from time drive selected -> currently no histogram
-            self.ax_histogram.clear()
-            self.ax_histogram.set_xlim(0, 8)
-            self.ax_histogram.set_xticks([0.5, 1.5, 2.5, 3.5, 4.5, 5.5, 6.5, 7.5])
-            self.ax_histogram.set_xticklabels(self.led_selection, rotation=15)
-            self.ax_histogram.set_xlabel('Wavelength [nm]')
-            self.ax_histogram.set_ylabel('Relative signal intensity [rfu]')
-        if self.threedimensional_plot_checkbox.isChecked():
-            # 3D Plot redrawing
-            self.ax_scoreplot.cla()
-            self.fig_scoreplot.clear()
-            self.ax_scoreplot = self.fig_scoreplot.gca(projection='3d')
-            self.ax_scoreplot.set_xlabel('LDA 1', fontsize=13, labelpad=10)
-            self.ax_scoreplot.set_ylabel('LDA 2', fontsize=13, labelpad=10)
-            self.ax_scoreplot.set_zlabel('LDA 3', fontsize=13, labelpad=10)
-            self.fig_scoreplot.subplots_adjust(left=0.1, right=0.9, bottom=0.18, top=0.85)
-            self.fig_scoreplot.canvas.draw()
-        else:
-            # 2D Plot activated
-            self.ax_scoreplot.cla()
-            self.fig_scoreplot.clear()
-            self.ax_scoreplot = self.fig_scoreplot.add_subplot(111)
-            self.ax_scoreplot.set_xlabel('LDA 1', fontsize=13, labelpad=10)
-            self.ax_scoreplot.set_ylabel('LDA 2', fontsize=13, labelpad=10)
-            self.fig_scoreplot.subplots_adjust(left=0.12, right=0.9, bottom=0.18, top=0.85)
-            self.fig_scoreplot.canvas.draw()
+                returnValue = msgBox.exec()
+                if returnValue == QMessageBox.Ok:
+                    pass
 
-        if not self.xcoords and not self.xcoords_prescan:
-            self.message.append('No time range selected - use whole timeline as sample')
-            self.xcoords = [self.loaded_data['l_corr'].index[0], self.loaded_data['l_corr'].index[-1], 0, 0]
-        if len(self.xcoords) == 2:
-            self.message.append('Only the sample range was selected - use blank which is stored in header')
-            self.xcoords = [self.xcoords[0], self.xcoords[1], 0, 0]
+    # ---------------------------------------------------
+    def run_simulation(self):
+        self.sensor_ph = dict({'E0': float(self.ph_ref_edit.text()), 't90': float(self.ph_t90_edit.text()),
+                               'resolution': float(self.ph_res_edit.text()), 'sensitivity': 2,
+                               'time steps': float(self.smpgrate_edit.text()) / 1000,
+                               'background signal': float(self.ph_signal_edit.text())})
 
-        if self.priority_checkbox.isChecked() is True:
-            priority = True
-        else:
-            priority = False
+        pH_range = [float(i) for i in self.phrange_edit.text().split(',')]
+        self.sensor_nh3 = dict({'pH range': pH_range, 'sensitivity': 2,  'pKa': float(self.nh3_pka_edit.text()),
+                                'response time': float(self.nh3_t90_edit.text()),
+                                'resolution': float(self.nh3_res_edit.text()),
+                                'time steps': float(self.smpgrate_edit.text()) / 1000,
+                                'nh3 range': [float(i) for i in self.nh3_alpha_edit.text().split(',')],
+                                'signal min': float(self.nh3_signal_edit.text().split(',')[0]),
+                                'signal max': float(self.nh3_signal_edit.text().split(',')[1])})
 
-        if self.prescan_edit.toPlainText() and not self.sample_edit.toPlainText():
-            # already evaluated data
-            self.mean_corr = self.led_mean_red
-        elif not self.prescan_edit.toPlainText() and self.sample_edit.toPlainText():
-            # raw data evaluation
-            self.mean_corr = self.loaded_data['l_corr'].mean()
+        self.para_meas = dict({'Temperature': float(self.temperature_edit.text()),
+                               'Plateau time': float(self.tsteady_edit.text()),
+                               'pH steps': list(np.arange(pH_range[0], pH_range[1] + 1)),
+                               'sampling rate': float(self.smpgrate_edit.text()),
+                               'GGW concentration': float(self.nh3_cGG_edit.text())})
 
-        try:
-            self.fname_database
-        except:
-            run_missing_database = QMessageBox()
-            run_missing_database.setIcon(QMessageBox.Information)
-            run_missing_database.setText("Database is missing!")
-            run_missing_database.setInformativeText("Select a folder for database!")
-            run_missing_database.setWindowTitle("Missing input!")
-            run_missing_database.exec_()
-            return
+        # ------------------------------------------------------------------------------
+        # TAN system - pH curve of NH3 and NH4 in percentage
+        df_alpha = bs._tan_simulation(c_nh4=float(self.nh3_cGG_edit.text()), phmin=self.sensor_nh3['pH range'][0],
+                                      phmax=self.sensor_nh3['pH range'][1], step_ph=1.,
+                                      ph_deci=self.sensor_ph['sensitivity'], pKa=self.sensor_nh3['pKa'])
 
-        trainingsdata = self.fname_database
-        device_training = 1
+        # ------------------------------------------------------------------------------
+        # pH sensor modelation
+        dfpH_target, dfSig_calib, dfph_re = bs.pH_sensor(sensor_ph=self.sensor_ph, para_meas=self.para_meas,
+                                                         df_alpha=df_alpha)
 
-        # Load trainings data, which is already corrected
-        self.message.append('Start loading reference database... ')
+        # ------------------------------------------------------------------------------
+        # NH3 / NH4+ sensor modulation
+        [df_tan_target, dfconc_target, para_nh3,
+         df_record, df_tan] = bs.NH3_sensor(df_alpha=df_alpha, dfph_re=dfph_re, para_meas=self.para_meas,
+                                            dfpH_target=dfpH_target, sensor_nh3=self.sensor_nh3)
 
-        # reduce trainings database to selected LEDs
-        [self.training_corr_red_sort, training,
-         self.training_red] = algae_analysis.training_database(trainings_path=trainingsdata, led_used=self.led_used)
+        # --------------------------------------------------------------------------------------------------------------
+        # plotting part
+        # single sensor calibration
+        fig1 = plot_calibration_ph(dfSig_calib=dfSig_calib, fig=self.fig_phcalib, ax=self.ax_phcalib)
 
-        # message that trainings matrix is loaded
-        self.message.append('Reference data base is loaded: check ✓')
+        conc_nh3 = np.arange(self.sensor_nh3['nh3 range'][0], self.sensor_nh3['nh3 range'][1],
+                             step=self.sensor_nh3['nh3 range'][2])
+        fig2 = plot_calibration_nh3(conc_nh3=conc_nh3, para_nh3=para_nh3, fig=self.fig_nh3calib, ax=self.ax_nh3calib)
 
-        # Load additional information, e.g. color classes and genus names
-        if self.threedimensional_plot_checkbox.isChecked() is True:
-            self.score_type = 3
-        elif self.twodimensional_plot_checkbox.isChecked() is True:
-            self.score_type = 2
-        else:
-            self.message.append('Error! Choose a distinct plot dimension')
-            return
+        # final model
+        fig3, fig4 = plot_tanModel(dfconc_target=dfconc_target, df_tan_target=df_tan_target, df_record=df_record,
+                                   df_tan=df_tan, dfph_re=dfph_re, phmax=pH_range[1], ph_target=dfpH_target,
+                                   fig1=self.fig_nh3sim, ax1=self.ax_nh3sim, fig2=self.fig_tanim, ax2=self.ax_tansim,
+                                   ax22=self.ax_tansim_ph, ax12=self.ax_nh3sim_ph)
+
+        # ------------------------------------------------------------------------------------------------------------------
+        # collect for result output (save data)
+        self.dic_target = dict({'TAN': df_tan_target, 'NH3 simulation': df_alpha, 'target conc nh3': dfconc_target})
+        self.dic_sens_calib = dict({'pH': dfSig_calib, 'NH3': para_nh3})
+        self.dic_sens_record = dict({'tan': df_tan, 'NH3': df_record, 'pH': dfph_re})
+        self.dic_figures = dict({'pH calib': fig1, 'NH3 calib': fig2, 'model': fig3, 'TAN': fig4})
 
 
-# =====================================================================================================================
+# .....................................................................................................................
+def plot_calibration_ph(dfSig_calib, fig=None, ax=None):
+    ax.cla()
+    # preparation of figure plot
+    if ax is None:
+        fig, ax = plt.subplots()
+        ax.set_aspect('auto')
+    ax.set_xlabel('pH value'), ax.set_ylabel('Potential [mV]')
+    ax.plot([int(i) for i in dfSig_calib.index], dfSig_calib, lw=1., color='k')
+    ax.set_xlim(0, 15)
+
+    sns.despine(), fig.subplots_adjust(left=0.18, right=0.95, bottom=0.2, top=0.9)
+    fig.canvas.draw()
+    return fig
+
+
+def plot_calibration_nh3(conc_nh3, para_nh3, fig=None, ax=None):
+    ax.cla()
+    # preparation of figure plot
+    if ax is None:
+        fig, ax = plt.subplots()
+        ax.set_aspect('auto')
+    ax.set_xlabel('alpha(NH$_3$) [%]'), ax.set_ylabel('Potential [mV]')
+
+    ax.plot(conc_nh3, para_nh3[0] * conc_nh3 + para_nh3[1], lw=1., color='k')
+
+    sns.despine(), fig.subplots_adjust(left=0.18, right=0.95, bottom=0.2, top=0.9)
+    fig.canvas.draw()
+    return fig
+
+
+def plot_tanModel(dfconc_target, df_tan_target, df_record, df_tan, dfph_re, phmax, ph_target, fig1=None, ax1=None,
+                  ax12=None, fig2=None, ax2=None, ax22=None):
+    ax1.cla(), ax2.cla(), ax22.cla()
+    # preparation of figure plot
+    if ax1 is None:
+        fig1, ax1 = plt.subplots()
+        ax1.set_aspect('auto')
+        ax12 = ax1.twinx()
+    if ax2 is None:
+        fig2, ax2 = plt.subplots()
+        ax2.set_aspect('auto')
+        ax22 = ax2.twinx()
+
+    ax1.spines['top'].set_visible(False), ax1.spines['right'].set_visible(False)
+    ax22.spines['right'].set_visible(True), ax12.spines['right'].set_visible(True)
+
+    ax1.set_xlabel('Time [s]'), ax2.set_xlabel('Time [s]')
+    ax1.set_ylabel('NH$_3$ / NH$_4^+$ [ppm]'), ax12.set_ylabel('pH', color='gray')
+    ax22.set_ylabel('pH', color='gray'), ax2.set_ylabel('TAN [ppm]', color=dcolor['TAN'])
+
+    # top plot
+    ax1.plot(df_record['nh3 / ppm'], lw=1., color=dcolor['NH3'], label='NH$_3$')
+    ax1.plot(df_record['nh4 / ppm'], lw=1., color=dcolor['NH4'], label='NH$_4^+$')
+    ax1.legend(frameon=True, fancybox=True, loc=0)
+    ax1.plot(dfconc_target['nh3 / ppm'], lw=1., ls=ls['target'], color='k')
+    ax1.plot(dfconc_target['nh4 / ppm'], lw=1., ls=ls['target'], color='gray')
+    ax1.set_ylim(-10, dfconc_target['nh4 / ppm'].max()*1.1)
+    ax12.plot(ph_target['pH'], lw=1., ls='-.', color='gray')
+
+    # bottom plot
+    ax2.plot(df_tan_target, lw=1., ls=ls['target'], color='k')
+    ax2.plot(df_tan, lw=1., color=dcolor['TAN'])
+    ax22.plot(ph_target['pH'], lw=1., ls='-.', color='gray')
+    ax22.plot(dfph_re, lw=1., ls=':', color='k')
+    ax2.set_ylim(df_tan['TAN'].loc[5:].min()*0.95, df_tan['TAN'].loc[5:].max()*1.05), ax22.set_ylim(-0.5, phmax * 1.05)
+
+    fig1.subplots_adjust(left=0.15, right=0.95, bottom=0.2, top=0.9)
+    fig2.subplots_adjust(left=0.15, right=0.85, bottom=0.2, top=0.9)
+    fig1.canvas.draw(), fig2.canvas.draw()
+    return fig1, fig2
+
+
+# .....................................................................................................................
 if __name__ == '__main__':
     app = QApplication(sys.argv)
+    # where to display the GUI (which monitor in case there are several)
     view = MainWindow()
+    # set size of the monitor (frame)
     view.setGeometry(50, 70, 1300, 750)
     sys.exit(app.exec_())
