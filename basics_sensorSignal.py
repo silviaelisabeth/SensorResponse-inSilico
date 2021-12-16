@@ -293,15 +293,18 @@ def save_report(para_meas, sensor_ph, sensor_nh3, dsens_record, dtarget):
     df_ph = pd.DataFrame(np.zeros(shape=(len(sensor_ph.values()), 2)))
     df_ph[0] = list(sensor_ph.keys())
     df_ph[1] = sensor_ph.values()
+    ph_target = list(dict.fromkeys(sensor_ph['pH target']['signal'].to_list()))
+    df_ph.loc[7] = ['pH target', ph_target]
     df_ph.columns = ['parameter', 'values']
     df_ph.index = ['ph'] * len(df_ph.index)
 
     df_nh3 = pd.DataFrame(np.zeros(shape=(len(sensor_nh3.values()), 2)))
     df_nh3[0] = list(sensor_nh3.keys())
     df_nh3[1] = sensor_nh3.values()
+    nhx_target = list(dict.fromkeys(sensor_nh3['nhx range']['signal'].to_list()))
+    df_nh3.loc[6] = ['nhx target', nhx_target]
     df_nh3.columns = ['parameter', 'values']
     df_nh3.index = ['nh3'] * len(df_nh3.index)
-
     df_para = pd.concat([df_p, df_ph, df_nh3])
     # ..................................................................
     # results
@@ -322,3 +325,40 @@ def save_report(para_meas, sensor_ph, sensor_nh3, dsens_record, dtarget):
     output = pd.concat([df_para, df_out])
 
     return output
+
+
+def load_data(file):
+    file_ = open(file, 'r')
+    count = 0
+    ls_lines = list()
+    while True:
+        count += 1
+        line = file_.readline()
+        # if line is empty end of file is reached
+        if not line:
+            break
+        ls_lines.append(line.strip().split('\t'))
+    file_.close()
+
+    # ............................................................
+    ls_general = list()
+    for l in ls_lines:
+        if l[0] == 'general':
+            ls_general.append(l[1:])
+    df_general = pd.DataFrame(ls_general).T.set_index(0).T.set_index('parameter')
+
+    ls_ph = list()
+    for l in ls_lines:
+        if l[0] == 'ph':
+            ls_ph.append(l[1:])
+    df_ph = pd.DataFrame(ls_ph, columns=['parameter', 'values'])
+    df_ph = df_ph.set_index('parameter')
+
+    ls_nh3 = list()
+    for l in ls_lines:
+        if l[0] == 'nh3':
+            ls_nh3.append(l[1:])
+    df_nh3 = pd.DataFrame(ls_nh3, columns=['parameter', 'values'])
+    df_nh3 = df_nh3.set_index('parameter')
+
+    return df_general, df_ph, df_nh3

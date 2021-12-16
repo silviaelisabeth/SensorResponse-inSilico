@@ -480,6 +480,7 @@ class MainWindow(QMainWindow):
         self.nh3_pka_edit.setText('9.25')
         self.ph_drift_edit.setText('0.1')
         self.nh3_drift_edit.setText('-5e-6')
+        self.inputFileLineEdit.setText('')
 
     def clear_phsim(self):
         self.ax_phsim.cla()
@@ -547,31 +548,39 @@ class MainWindow(QMainWindow):
         # opens a dialog window in the current path
         fname, filter = QFileDialog.getOpenFileName(self, "Select specific txt file for temperature compensation",
                                                     "", "Text files (*.txt *.csv *xls)")
+
         if fname:
             self.inputFileLineEdit.setText(fname)
-            print('now do something with this file')
             df_general, df_ph, df_nh3 = bs.load_data(fname)
 
-            print(df_general)
             # set parameter to run the simulation
-            self.temperature_edit.setText(df_general.loc['Temperature', 'values'])
-            s = df_nh3.loc['pH range', 'values'][1:-1]
-            self.phrange_edit.setText(s)
-            self.tsteady_edit.setText(df_general.loc['Plateau time', 'values'])
+            self.temperature_edit.setText(df_general.loc['temperature', 'values'])
+            self.tsteady_edit.setText(df_general.loc['plateau time', 'values'])
             self.smpgrate_edit.setText(df_general.loc['sampling rate'].values[0])
 
+            # pH sensor
             self.ph_t90_edit.setText(df_ph.loc['t90', 'values'])
-            self.ph_signal_edit.setText(df_ph.loc['background signal', 'values'])
-            self.ph_res_edit.setText(df_ph.loc['resolution', 'values'])
-            self.ph_ref_edit.setText(df_ph.loc['E0', 'values'])
+            self.ph_drift_edit.setText(df_ph.loc['drift', 'values'])
+            ph_target = df_ph.loc['pH target', 'values'][1:-1]
+            self.ph_edit.setText(ph_target)
 
-            self.nh3_t90_edit.setText(df_nh3.loc['response time', 'values'])
-            s = df_nh3.loc['signal min', 'values'] + ', ' + df_nh3.loc['signal max', 'values']
-            self.nh3_signal_edit.setText(s)
-            self.nh3_res_edit.setText(df_nh3.loc['resolution', 'values'])
+            # NHx sensor
+            self.nh3_t90_edit.setText(df_nh3.loc['t90', 'values'])
             self.nh3_pka_edit.setText(df_nh3.loc['pKa', 'values'])
-            self.nh3_cGG_edit.setText(df_general.loc['GGW concentration', 'values'])
-            self.nh3_alpha_edit.setText(df_nh3.loc['nh3 range', 'values'][1:-1])
+            self.nh3_drift_edit.setText(df_nh3.loc['drift', 'values'])
+            if df_nh3.loc['analyte', 'values'] == 'NH3':
+                self.nh3_edit.setText(df_nh3.loc['nhx target', 'values'][1:-1])
+                self.nh4_edit.setText('')
+            else:
+                self.nh4_edit.setText(df_nh3.loc['nhx target', 'values'][1:-1])
+                self.nh3_edit.setText('')
+
+            # select status of drift
+            if float(self.nh3_drift_edit.text()) != 0:
+                self.nh3_drift_box.setChecked(True)
+            if float(self.ph_drift_edit.text()) != 0:
+                self.ph_drift_box.setChecked(True)
+
 
     def save(self):
         # opens window in current path. User input to define file name
@@ -593,7 +602,7 @@ class MainWindow(QMainWindow):
 
                     # save figures in separate folder
                     for f in self.dic_figures.keys():
-                        figure_name = fname_save + '_Graph-' + '-'.join(f.split(' ')) + '.'
+                        figure_name = fname_save.split('.')[0] + '_Graph-' + '-'.join(f.split(' ')) + '.'
                         for t in save_type:
                             self.dic_figures[f].savefig(figure_name + t, dpi=300)
                 else:
@@ -741,9 +750,6 @@ class MainWindow(QMainWindow):
         self.dic_sens_record = dict({'tan': df_calc['TAN'], analyte: df_calc[analyte], 'pH': df_calc['pH'],
                                      '{}'.format(additional): df_calc[additional]})
         self.dic_figures = dict({'pH': fig_pH, 'NH3': fig_NHx, 'TAN': fig_tan})
-
-# .....................................................................................................................
-
 
 # .....................................................................................................................
 def plot_phsensor(dfS_target, dfS_rec, fig=None, ax=None):
