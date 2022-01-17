@@ -118,7 +118,7 @@ def henderson_TAN4NH4(pH, c_tan, pKa=9.25):
 
 
 # --------------------------------------------------------------------------------------------------------------------
-def _target_fluctuation(ls_conc, tstart, tstop, nP=1):
+def _target_fluctuation(ls_conc, tstart, tstop, nP=1, steps=0.05):
     """
     Function for periodic block-change of concentration
     :param cnh4_low:  minimal ammonium concentration
@@ -131,29 +131,35 @@ def _target_fluctuation(ls_conc, tstart, tstop, nP=1):
     :return:
     """
 
-    N = ((tstop - tstart) / 0.05) + 1
+    N = ((tstop - tstart) / steps) + 1
     P = N / nP
     D = P / 2
 
     # when ls_conc has more than 1 entry -> step function
-    if isinstance(ls_conc, tuple):
-        ls_sig = list(map(lambda n: list((np.arange(N) % P < D) * (ls_conc[n] - ls_conc[n + 1]) + ls_conc[n + 1]),
-                          range(len(ls_conc) - 1)))
-        dsig = dict()
-        for i in range(len(ls_sig)):
-            x = np.linspace(tstop / 2 * i, tstop + tstop / 2 * i, num=int(N))
-            dsig[i] = pd.DataFrame(ls_sig[i], columns=['signal'], index=x)
+    ls_sig = list(map(lambda n: list((np.arange(N) % P < D) * (ls_conc[n] - ls_conc[n + 1]) + ls_conc[n + 1]),
+                      range(len(ls_conc) - 1)))
+    x0 = np.arange(0, tstop + steps, steps)
+    dsig = dict()
+    for i in range(len(ls_sig)):
+        if i == 0:
+            x = x0
+        else:
+            x = np.arange((x0[-1]/2+steps)*i, x0[-1]/2*i + steps*(i+1) + x0[-1], steps)
+        dsig[i] = pd.DataFrame(ls_sig[i], columns=['signal'], index=x)
 
-        df_target = pd.concat(dsig, axis=0)
-        trange = [i[1] for i in df_target.index]
-        df_target.index = trange
-    else:
-        trange = np.linspace(0, tstop, num=int(N))
-        df_target = pd.DataFrame([ls_conc] * len(trange), index=trange, columns=['signal'])
+    df_target = pd.concat(dsig, axis=0)
+    trange = [i[1] for i in df_target.index]
+    df_target.index = trange
 
+    # remove duplicates from dataframe
+    xnew = [round(x, 2) for x in df_target.index]
+    df_target.index = xnew
+    df_target = df_target.groupby(df_target.index).mean()
+
+    # finalize output
     df_target.index.name = 'time/s'
 
-    return df_target, trange, D
+    return df_target, df_target.index, D
 
 
 def _target_concentration(ls_ph, ls_cNH3_ppm, ls_cNH4_ppm, t_plateau):
@@ -191,21 +197,6 @@ def signal_drift(xtime, df_mV, psensor):
 
 
 def _sensor_response(cplateau, psensor, tplateau):
-    # # what are the specific signal levels
-    # ni = 0
-    # conc_plateau = list()
-    # for i in df_mV['potential mV'].to_numpy():
-    #     if ni != i:
-    #         conc_plateau.append(i)
-    #         ni = i
-    # # conc_plateau = list(dict.fromkeys(df_mV['potential mV'].to_numpy()))
-    # print(198, 'plateau mV', conc_plateau)
-
-    # update concentration in case one analyte changes more often than the other one
-
-    # timing - define sensor time (for simulation of response)
-    #tplateau = ttarget# df_mV[df_mV == conc_plateau[0]].dropna().index[-1]
-
     start, steps = 0, 0.05
     num = int((tplateau - start) / 0.05 + 1)
     sens_time = np.linspace(start, tplateau, num=num)
@@ -215,8 +206,10 @@ def _sensor_response(cplateau, psensor, tplateau):
     dsig = dict()
     for en, ctarget in enumerate(cplateau):
         sdiff = ctarget - c_apparent
-        xnew = np.linspace(start + steps * en, tplateau * (en + 1) + steps * en, num=num)
-
+        if en == 0:
+            xnew = sens_time
+        else:
+            xnew = np.linspace((tplateau + steps) * en, (tplateau + steps) * en + tplateau, num=num)
         df_sig = pd.DataFrame(_gompertz_curve_v1(x=sens_time, t90=psensor['t90'], s_diff=sdiff, pstart=c_apparent,
                                                  tau=psensor['resolution'], slope='increase'), index=xnew,
                               columns=['potential mV'])
@@ -239,12 +232,8 @@ def calibSensor_pH(target_ph, sensor_ph, para_meas):
                                                E0=sensor_ph['E0']), index=target_ph.index, columns=['potential mV'])
 
     # what are the specific signal levels
-    ni = 0
-    cplateau = list()
-    for i in df_sigpH_mV['potential mV'].to_numpy():
-        if ni != i:
-            cplateau.append(i)
-            ni = i
+    cplateau = [Nernst_equation(ls_ph=p, T=para_meas['temperature'], E0=sensor_ph['E0'])
+                for p in sensor_ph['set values']]
     return df_sigpH_mV, cplateau
 
 
@@ -256,12 +245,7 @@ def calibSensor_TAN(target_nhx, sensor_nh3):
     df_sigTAN_mV.columns = ['potential mV']
 
     # what are the specific signal levels
-    ni = 0
-    cplateau = list()
-    for i in df_sigTAN_mV['potential mV'].to_numpy():
-        if ni != i:
-            cplateau.append(i)
-            ni = i
+    cplateau = [t * para_nh3[0] + para_nh3[1] for t in sensor_nh3['set values']]
     return df_sigTAN_mV, cplateau, para_nh3
 
 
@@ -298,6 +282,7 @@ def pH_sensor(cplateau, sensor_ph, para_meas):
     # include sensor response
     df_pHrec, df_pHdrift = _sensor_response(cplateau=cplateau, psensor=sensor_ph, tplateau=para_meas['plateau time'])
     df_pHdrift.columns = ['Drift pH mV']
+
     # -------------------------------------
     # re-calculate pH from potential
     df_recalc = pd.DataFrame(Nernst_equation_invert(E=df_pHdrift['Drift pH mV'], E0=sensor_ph['E0'],
