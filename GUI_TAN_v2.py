@@ -35,15 +35,16 @@ E0 = 0.43                  # zero potential of the reference electrode
 tsteps = 1e-3              # time steps for pH and NH3 sensor (theory)
 
 # electrochemical NH3 sensor
-nhx_calib = 0, 100           # calibration points for concentration range
+nh3_calib = 1              # concentration point for NH3 at which the potential was measured
+nh4_calib = 0.1              # concentration point for NH4 at which the potential was measured
 sigNH3_max = 0.09            # maximal signal at maximal NH3 concentration in mV (pH=1)
 sigNH3_bgd = 0.02            # background signal / offset in mV at 0M NH3
 nh3_res = 1e-9               # resolution of the NH3 sensor
 sbgd_nhx = 0.03              # background signal
 
-# !!!TODO:
-# clean up all out commented parts
-# finalize software to run it on all systems
+# !!!TODO: clean up all out commented parts
+# !!!TODO: finalize software to run it on all systems
+# !!!TODO: update saving
 
 
 # .....................................................................................................................
@@ -51,7 +52,7 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super(MainWindow, self).__init__()
         self.initUI()
-        self.dic_sens_record = None
+        self.df_res = None
         self.setWindowIcon(QIcon('icon.png'))
 
     def initUI(self):
@@ -127,7 +128,7 @@ class MainWindow(QMainWindow):
         self.tsteady_edit = QLineEdit(self)
         self.tsteady_edit.setValidator(QDoubleValidator())
         self.tsteady_edit.setAlignment(Qt.AlignRight)
-        self.tsteady_edit.setText('10.')
+        self.tsteady_edit.setText('75.')
 
         # pH sensor settings
         pH_label = QLabel(self)
@@ -135,7 +136,7 @@ class MainWindow(QMainWindow):
         self.ph_edit = QLineEdit(self)
         self.ph_edit.setValidator(QRegExpValidator())
         self.ph_edit.setAlignment(Qt.AlignRight)
-        self.ph_edit.setText('7., 9.')
+        self.ph_edit.setText('8.4, 10.9')
 
         ph_t90_label, ph_t90_unit = QLabel(self), QLabel(self)
         ph_t90_label.setText('Response time')
@@ -143,25 +144,24 @@ class MainWindow(QMainWindow):
         self.ph_t90_edit = QLineEdit(self)
         self.ph_t90_edit.setValidator(QDoubleValidator())
         self.ph_t90_edit.setAlignment(Qt.AlignRight)
-        self.ph_t90_edit.setText('1.')
+        self.ph_t90_edit.setText('30.')
 
         self.ph_drift_box, ph_drift_unit = QCheckBox('Sensor drift', self), QLabel(self)
-        self.ph_drift_box.stateChanged.connect(self.clickBox)
         ph_drift_unit.setText('mV/s')
         self.ph_drift_edit = QLineEdit(self)
         self.ph_drift_edit.setValidator(QDoubleValidator())
         self.ph_drift_edit.setAlignment(Qt.AlignRight)
-        self.ph_drift_edit.setText('0.1')
+        self.ph_drift_edit.setText('0.01')
 
         # ---------------------
         # NH3 sensor settings
-        tan_label, tan_unit = QLabel(self), QLabel(self)
-        tan_label.setText('c(TAN)'), tan_unit.setText('ppm')
-        self.tan_edit = QLineEdit(self)
-        self.tan_edit.setFixedWidth(100)
-        self.tan_edit.setValidator(QRegExpValidator())
-        self.tan_edit.setAlignment(Qt.AlignRight)
-        self.tan_edit.setText('100')
+        nhx_label, nhx_unit = QLabel(self), QLabel(self)
+        nhx_label.setText('c(NHx)'), nhx_unit.setText('ppm')
+        self.nhx_edit = QLineEdit(self)
+        self.nhx_edit.setFixedWidth(100)
+        self.nhx_edit.setValidator(QRegExpValidator())
+        self.nhx_edit.setAlignment(Qt.AlignRight)
+        self.nhx_edit.setText('10.0')
 
         # self.analyte = None
         self.NH3_cbox, self.NH4_cbox = QCheckBox('NH3', self), QCheckBox('NH4+', self)
@@ -176,7 +176,7 @@ class MainWindow(QMainWindow):
         self.nh3_t90_edit.setFixedWidth(100)
         self.nh3_t90_edit.setValidator(QDoubleValidator())
         self.nh3_t90_edit.setAlignment(Qt.AlignRight)
-        self.nh3_t90_edit.setText('0.5')
+        self.nh3_t90_edit.setText('60.')
         nh3_pka_label = QLabel(self)
         nh3_pka_label.setText('pKa')
         self.nh3_pka_edit = QLineEdit(self)
@@ -186,13 +186,12 @@ class MainWindow(QMainWindow):
         self.nh3_pka_edit.setText('9.25')
 
         self.nh3_drift_box, nh3_drift_unit = QCheckBox('Sensor drift', self), QLabel(self)
-        self.nh3_drift_box.stateChanged.connect(self.clickBox)
         nh3_drift_unit.setText('mV/s')
         self.nh3_drift_edit = QLineEdit(self)
         self.nh3_drift_edit.setFixedWidth(100)
         self.nh3_drift_edit.setValidator(QDoubleValidator())
         self.nh3_drift_edit.setAlignment(Qt.AlignRight)
-        self.nh3_drift_edit.setText('-5e-4')
+        self.nh3_drift_edit.setText('-0.1')
 
         # -----------------------
         # General navigation
@@ -297,9 +296,9 @@ class MainWindow(QMainWindow):
         hbox_lbottom.addWidget(nh3sens_group)
         nh3sens_group.setLayout(grid_load)
 
-        grid_load.addWidget(tan_label, 0, 0)
-        grid_load.addWidget(self.tan_edit, 0, 1)
-        grid_load.addWidget(tan_unit, 0, 2)
+        grid_load.addWidget(nhx_label, 0, 0)
+        grid_load.addWidget(self.nhx_edit, 0, 1)
+        grid_load.addWidget(nhx_unit, 0, 2)
         grid_load.addWidget(self.NH3_cbox, 1, 1)
         grid_load.addWidget(self.NH4_cbox, 1, 2)
         grid_load.addWidget(nh3_t90_label, 2, 0)
@@ -315,12 +314,8 @@ class MainWindow(QMainWindow):
         hbox_lbottom.addSpacing(10)
 
         # for all parameters - connect LineEdit with function
-        self.temperature_edit.editingFinished.connect(self.print_temperature)
-        self.tsteady_edit.editingFinished.connect(self.print_tsteady)
-        self.ph_edit.returnPressed.connect(self.print_phrange)
         self.ph_t90_edit.returnPressed.connect(self.print_ph_t90)
         self.nh3_t90_edit.returnPressed.connect(self.print_nh3_t90)
-        self.nh3_pka_edit.returnPressed.connect(self.print_nh3_pka)
 
         # ----------------------------------------------------------------------------------------------------------------
         # connect buttons in navigation manager with functions
@@ -390,19 +385,6 @@ class MainWindow(QMainWindow):
         self.show()
 
     # ---------------------------------------------------
-    # Functions for analysis
-    def print_temperature(self):
-        print('Temperature: ', self.temperature_edit.text(), 'degC')
-
-    def print_phrange(self):
-        print('pH range: ', self.ph_edit.text())
-
-    def print_tsteady(self):
-        print('plateau time for step function: ', self.tsteady_edit.text())
-
-    def print_samplingrate(self):
-        print('Sampling rate: ', self.smpgrate_edit.text(), 's')
-
     def print_ph_t90(self):
         print('pH sensor response: ', self.ph_t90_edit.text(), 's')
 
@@ -418,15 +400,6 @@ class MainWindow(QMainWindow):
             returnValue = msgBox.exec()
             if returnValue == QMessageBox.Ok:
                 pass
-
-    def print_ph_signal(self):
-        print('pH sensor signal (min): ', self.ph_signal_edit.text(), 'mV')
-
-    def print_ph_resolution(self):
-        print('pH sensor resolution: ', self.ph_res_edit.text(), 'mV')
-
-    def print_ph_reference_pot(self):
-        print('Potential reference electrode: ', self.ph_ref_edit.text(), 'mV')
 
     def print_nh3conc(self):
         self.nh4_edit.setText('')
@@ -453,35 +426,20 @@ class MainWindow(QMainWindow):
             if returnValue == QMessageBox.Ok:
                 pass
 
-    def print_nh3_signal(self):
-        print('nH3 sensor signal: ', self.nh3_signal_edit.text(), 'mV')
-
-    def print_nh3_resolution(self):
-        print('Sensor resolution: ', self.nh3_res_edit.text(), 'mV')
-
-    def print_nh3_pka(self):
-        print('pKa: ', self.nh3_pka_edit.text())
-
-    def print_nh3_concentration(self):
-        print('NH3 concentration at pKa: ', self.nh3_cGG_edit.text(), 'ppm')
-
-    def print_nh3_alpha(self):
-        print('NH3 proportion range: ', self.nh3_alpha_edit.text(), '%')
-
     # ---------------------------------------------------
     def clear_parameters(self):
         # re-write default parameters
         self.temperature_edit.setText('25.')
-        self.tsteady_edit.setText('10.')
-        self.ph_edit.setText('7., 9.')
-        self.ph_t90_edit.setText('1.')
-        self.tan_edit.setText('100')
+        self.tsteady_edit.setText('75.')
+        self.ph_edit.setText('8.4, 10.9')
+        self.ph_t90_edit.setText('30.')
+        self.nhx_edit.setText('10.0')
         self.NH3_cbox.setChecked(False)
         self.NH4_cbox.setChecked(True)
-        self.nh3_t90_edit.setText('0.5')
+        self.nh3_t90_edit.setText('60.')
         self.nh3_pka_edit.setText('9.25')
-        self.ph_drift_edit.setText('0.1')
-        self.nh3_drift_edit.setText('-5e-4')
+        self.ph_drift_edit.setText('0.01')
+        self.nh3_drift_edit.setText('-0.1')
         self.inputFileLineEdit.setText('')
 
     def clear_phsim(self):
@@ -511,19 +469,15 @@ class MainWindow(QMainWindow):
 
         self.fig_tansim.canvas.draw()
 
-    def clickBox(self, state):
-        if state == Qt.Checked:
-            print('Checked')
-        else:
-            print('Unchecked')
-
     def NH3clickBox(self, state):
         if state == Qt.Checked:
             self.NH4_cbox.setCheckState(False)
+            self.nhx_edit.setText('100.')
 
     def NH4clickBox(self, state):
         if state == Qt.Checked:
             self.NH3_cbox.setCheckState(False)
+            self.nhx_edit.setText('10.0')
 
     def align_concentrations(self, ls_ph, ls_cTAN_ppm):
         if len(ls_cTAN_ppm) == len(ls_ph):
@@ -546,42 +500,39 @@ class MainWindow(QMainWindow):
                     ls_cTAN_ppm.append(ls_cTAN_ppm[-1])
         return ls_ph, ls_cTAN_ppm
 
-    def parameter_prep(self, t_plateau, ls_ph, ls_cTAN_ppm=None, ls_cNH3_ppm=None, ls_cNH4_ppm=None):
-        # !!! TODO: update function, in case NH3/NH4 are depreciated
-        if ls_cTAN_ppm:
-            if self.NH3_cbox.isChecked():
-                analyte = 'NH3'
-            elif self.NH4_cbox.isChecked():
-                analyte = 'NH4'
-            ls_nhx = ls_cTAN_ppm
-        else:
-            # define analyte - whether NH3 or NH4+
-            if np.all([n == None for n in ls_cNH3_ppm]) and not np.all([n == None for n in ls_cNH4_ppm]):
-                analyte, ls_nhx = 'NH4', ls_cNH4_ppm
-            elif not np.all([n == None for n in ls_cNH3_ppm]) and np.all([n == None for n in ls_cNH4_ppm]):
-                analyte, ls_nhx = 'NH3', ls_cNH3_ppm
-            else:
-                print('ERROR - define a concentration of NH3 / NH4 you want to study')
-                print('predefined NH3: 100ppm')
-                ls_nhx = (100, 100)
-                analyte = 'NH3'
-
-        # specify NHx concentrations - consider all options
-        ls_nh = tuple()
-        for en, n in enumerate(ls_nhx):
-            if n != None:
-                tn = (n,)
-                ls_nh += tn
-        if len(ls_nh) == 1:
-            ls_nh = ls_nh[0]
+    def parameter_prep(self, t_plateau, ls_ph, ls_cNHx_ppm, pKa):
+        if self.NH3_cbox.isChecked():
+            analyte, other = 'NH3', 'NH4'
+        elif self.NH4_cbox.isChecked():
+            analyte, other = 'NH4', 'NH3'
+        ls_nh = ls_cNHx_ppm
 
         # target fluctuation of analytes
-        [target_ph, trange, D] = bs._target_fluctuation(ls_conc=ls_ph, tstart=0, tstop=t_plateau * 2, nP=1)
-        [target_nhx, trange, D] = bs._target_fluctuation(ls_conc=ls_nh, tstart=0, tstop=t_plateau * 2, nP=1)
-        return target_ph, target_nhx, analyte
+        target_ph = bs.target_fluctuation(ls_conc=ls_ph, tstart=0, tstop=t_plateau * 2, nP=1, analyte='pH')
+        target_nhx = bs.target_fluctuation(ls_conc=ls_nh, tstart=0, tstop=t_plateau * 2, nP=1, analyte=analyte)
+
+        # calculate target concentration of other NHx parameter
+        df_res = pd.concat([target_ph, target_nhx], axis=1)
+        if analyte == 'NH4':
+            df_nh2 = bs.henderson_nh3(pH=df_res['signal pH'].to_numpy(), c_nh4=df_res['signal NH4'].to_numpy(), pKa=pKa)
+        elif analyte == 'NH3':
+            df_nh2 = bs.henderson_nh4(pH=df_res['signal pH'].to_numpy(), c_nh3=df_res['signal NH3'].to_numpy(), pKa=pKa)
+
+        # make sure it is a Dataframe with the same index as the other sensors
+        df_nh2 = pd.DataFrame(df_nh2, index=df_res.index, columns=['signal ' + other])
+
+        # calculate target TAN
+        df_tan = pd.DataFrame(df_nh2['signal ' + other] + df_res['signal ' + analyte], index=df_res.index,
+                              columns=['signal TAN'])
+
+        # combine to one dataframe
+        df_res = pd.concat([df_res, df_nh2, df_tan], axis=1)
+
+        return df_res, analyte
 
     # ---------------------------------------------------
     def load_data(self):
+        #!!!TODO: update save and load fct
         # opens a dialog window in the current path
         fname, filter = QFileDialog.getOpenFileName(self, "Select specific txt file for temperature compensation",
                                                     "", "Text files (*.txt *.csv *xls)")
@@ -604,12 +555,15 @@ class MainWindow(QMainWindow):
             self.nh3_t90_edit.setText(df_nh3.loc['t90', 'values'])
             self.nh3_pka_edit.setText(df_nh3.loc['pKa', 'values'])
             self.nh3_drift_edit.setText(df_nh3.loc['drift', 'values'])
+
             if df_nh3.loc['analyte', 'values'] == 'NH3':
-                self.nh3_edit.setText(df_nh3.loc['nhx target', 'values'][1:-1])
-                self.nh4_edit.setText('')
+                self.nhx_edit.setText(df_nh3.loc['NH3 target'].values[0][0][1:-1])
+                self.NH3_cbox.setCheckState(True)
+                self.NH4_cbox.setCheckState(False)
             else:
-                self.nh4_edit.setText(df_nh3.loc['nhx target', 'values'][1:-1])
-                self.nh3_edit.setText('')
+                self.nhx_edit.setText(df_nh3.loc['NH4 target'].values[0][0][1:-1])
+                self.NH4_cbox.setCheckState(True)
+                self.NH3_cbox.setCheckState(False)
 
             # select status of drift
             if float(self.nh3_drift_edit.text()) != 0:
@@ -629,18 +583,7 @@ class MainWindow(QMainWindow):
 
             # check whether we have data to save
             try:
-                if self.dic_sens_record:
-                    # save output now
-                    output = bs.save_report(para_meas=self.para_meas, sensor_ph=self.sensor_ph, dtarget=self.dic_target,
-                                            sensor_nh3=self.sensor_nh3, dsens_record=self.dic_sens_record)
-                    output.to_csv(fname_save, sep='\t', header=None)
-
-                    # save figures in separate folder
-                    for f in self.dic_figures.keys():
-                        figure_name = fname_save.split('.')[0] + '_Graph-' + '-'.join(f.split(' ')) + '.'
-                        for t in save_type:
-                            self.dic_figures[f].savefig(figure_name + t, dpi=300)
-                else:
+                if self.df_res is None:
                     msgBox = QMessageBox()
                     msgBox.setIcon(QMessageBox.Information)
                     msgBox.setText("Simulate before saving")
@@ -650,6 +593,18 @@ class MainWindow(QMainWindow):
                     returnValue = msgBox.exec()
                     if returnValue == QMessageBox.Ok:
                         pass
+                else:
+                    # save output now
+                    output = bs.save_report(para_meas=self.para_meas, sensor_ph=self.sensor_ph, df_res=self.df_res,
+                                            sensor_nh3=self.sensor_nh3,)
+                    output.to_csv(fname_save, sep='\t', header=None)
+
+                    # save figures in separate folder
+                    for f in self.dic_figures.keys():
+                        figure_name = fname_save.split('.')[0] + '_Graph-' + '-'.join(f.split(' ')) + '.'
+                        for t in save_type:
+                            self.dic_figures[f].savefig(figure_name + t, dpi=300)
+
             except NameError:
                 msgBox = QMessageBox()
                 msgBox.setIcon(QMessageBox.Information)
@@ -673,13 +628,7 @@ class MainWindow(QMainWindow):
 
             # check whether we have data to save
             try:
-                if self.dic_sens_record:
-                    # save output now
-                    output = bs.save_report(para_meas=self.para_meas, sensor_ph=self.sensor_ph, dtarget=self.dic_target,
-                                            sensor_nh3=self.sensor_nh3, dsens_record=self.dic_sens_record)
-                    output.to_csv(fname_save, sep='\t', header=None)
-
-                else:
+                if self.df_res is None:
                     msgBox = QMessageBox()
                     msgBox.setIcon(QMessageBox.Information)
                     msgBox.setText("Simulate before saving")
@@ -689,6 +638,12 @@ class MainWindow(QMainWindow):
                     returnValue = msgBox.exec()
                     if returnValue == QMessageBox.Ok:
                         pass
+                else:
+                    # save output now
+                    output = bs.save_report(para_meas=self.para_meas, sensor_ph=self.sensor_ph, df_res=self.df_res,
+                                            sensor_nh3=self.sensor_nh3)
+                    output.to_csv(fname_save, sep='\t', header=None)
+
             except NameError:
                 msgBox = QMessageBox()
                 msgBox.setIcon(QMessageBox.Information)
@@ -727,15 +682,19 @@ class MainWindow(QMainWindow):
         elif self.NH4_cbox.isChecked():
             analyte, additional = 'NH4', 'NH3'
 
-        # get TAN concentration(s) and pH value(s)
-        ls_cTAN_ppm = self._linEdit2list(line=self.tan_edit.text())
+        # get TAN concentration(s) and pH value(s) and align list of fluctuation points
+        ls_cNHx_ppm = self._linEdit2list(line=self.nhx_edit.text())
         ls_ph = self._linEdit2list(line=self.ph_edit.text())
+        ls_ph, ls_cNHx_ppm = self.align_concentrations(ls_ph=ls_ph, ls_cTAN_ppm=ls_cNHx_ppm)
 
-        ls_ph, ls_cTAN_ppm = self.align_concentrations(ls_ph=ls_ph, ls_cTAN_ppm=ls_cTAN_ppm)
-
-        [target_ph, target_nhx,
-         analyte] = self.parameter_prep(ls_ph=ls_ph, ls_cTAN_ppm=ls_cTAN_ppm, ls_cNH3_ppm=(None, None),
-                                        ls_cNH4_ppm=(None, None), t_plateau=float(self.tsteady_edit.text()))
+        if analyte == 'NH3':
+            [df_target,
+             analyte] = self.parameter_prep(ls_ph=ls_ph, ls_cNHx_ppm=ls_cNHx_ppm, pKa=float(self.nh3_pka_edit.text()),
+                                            t_plateau=float(self.tsteady_edit.text()))
+        elif analyte == 'NH4':
+            [df_target,
+            analyte] = self.parameter_prep(ls_ph=ls_ph, ls_cNHx_ppm=ls_cNHx_ppm, pKa=float(self.nh3_pka_edit.text()),
+                                           t_plateau=float(self.tsteady_edit.text()))
 
         # check-box status
         if self.ph_drift_box.isChecked():
@@ -750,12 +709,14 @@ class MainWindow(QMainWindow):
         # collect all relevant parameter
         self.sensor_ph = dict({'E0': E0, 't90': float(self.ph_t90_edit.text()), 'resolution': ph_res, 'drift': drift1,
                                'time steps': tsteps, 'background signal': sig_bgd, 'sensitivity': ph_deci,
-                               'pH target': target_ph, 'set values': ls_ph})
+                               'pH target': df_target['signal pH'], 'set values': ls_ph})
         self.sensor_nh3 = dict({'sensitivity': ph_deci, 'pKa': float(self.nh3_pka_edit.text()), 'time steps': tsteps,
                                 't90': float(self.nh3_t90_edit.text()), 'drift': drift2, 'resolution': nh3_res,
-                                'nhx range': target_nhx, 'NHx calibration': nhx_calib, 'analyte': analyte,
-                                'additional': additional, 'signal min': sigNH3_bgd, 'signal max': sigNH3_max,
-                                'background signal': sbgd_nhx, 'set values': ls_cTAN_ppm})
+                                'NH3 target': df_target['signal NH3'], 'NH4 target': df_target['signal NH4'],
+                                'TAN target': df_target['signal TAN'], 'calib NH3': nh3_calib, 'calib NH4': nh4_calib,
+                                'analyte': analyte, 'additional': additional, 'signal min': sigNH3_bgd,
+                                'signal max NH3': sigNH3_max, 'signal max NH4': sigNH3_max,
+                                'background signal': sbgd_nhx, 'set values': ls_cNHx_ppm})
         self.para_meas = dict({'temperature': float(self.temperature_edit.text()),
                                'plateau time': float(self.tsteady_edit.text())})
 
@@ -793,10 +754,14 @@ class MainWindow(QMainWindow):
         # clear figures
         self.clear_phsim(), self.clear_nh3timedrive(), self.clear_tantimdrive()
 
+        # target concentrations
+        df_res = pd.concat([self.sensor_ph['pH target'], self.sensor_nh3['NH3 target'], self.sensor_nh3['NH4 target'],
+                            self.sensor_nh3['TAN target']], axis=1)
+        df_res.columns = ['target pH', 'target_ppm NH3', 'target_ppm NH4', 'target_ppm TAN']
+
         # individual sensor - reduce by individual plotting (different function)
-        [df_res, cplateaupH, cplateauTAN,
-         para_nh3] = bs._alignSensorSettings(target_ph=self.sensor_ph['pH target'], sensor_ph=self.sensor_ph,
-                                             target_nhx=self.sensor_nh3['nhx range'], sensor_nh3=self.sensor_nh3,
+        [df_res, cplateaupH, cplateauNHx,
+         para_nhx] = bs._alignSensorSettings(sensor_ph=self.sensor_ph, sensor_nh3=self.sensor_nh3, df_target=df_res,
                                              para_meas=self.para_meas)
         xnew = [round(u, 2) for u in df_res.index]
         df_res.index = xnew
@@ -805,49 +770,42 @@ class MainWindow(QMainWindow):
         # pH sensor response
         [df_pHrec, df_pHdrift, df_pHcalc] = bs.pH_sensor(cplateau=cplateaupH, sensor_ph=self.sensor_ph,
                                                          para_meas=self.para_meas)
-        xnew2 = [round(u, 2) for u in df_pHdrift.index]
-        df_pHdrift.index, df_pHcalc.index = xnew2, xnew2
+        xnew = [round(i, 2) for i in df_pHdrift.index]
+        df_pHdrift.index, df_pHcalc.index = xnew, xnew
+
         df_res = pd.concat([df_res, df_pHdrift.loc[df_res.index], df_pHcalc.loc[df_res.index]],
                            axis=1).sort_index(axis=1)
 
-        # NHx sensor - TAN sensor response
-        [df_nhrec, df_nhdrift, df_NHcalc] = bs.NHx_sensor(analyte='TAN', cplateau=cplateauTAN, para_nh3=para_nh3,
+        # NHx sensor - calculate individual sensor response as well as TAN
+        [df_nhrec, df_nhdrift, df_NHcalc] = bs.NHx_sensor(cplateau=cplateauNHx, para_nhx=para_nhx,
                                                           sensor_nh3=self.sensor_nh3, para_meas=self.para_meas)
         xnew2 = [round(u, 2) for u in df_nhdrift.index]
         df_nhdrift.index, df_NHcalc.index = xnew2, xnew2
-
         df_res = pd.concat([df_res, df_nhdrift.loc[df_res.index], df_NHcalc.loc[df_res.index]],
                            axis=1).sort_index(axis=1)
 
         # .................................
-        # combine sensors
-        df_target = pd.concat([self.sensor_ph['pH target'], self.sensor_nh3['nhx range']], axis=1).dropna()
-        df_target.columns = ['pH target', 'TAN target']
+        # calculate sensor responses
+        df_target = df_res.filter(like='target')
 
-        # calculate individual analytes - target concentration and sensed concentration
-        dfNHx_target = bs.individualAnalytes(analyte=self.sensor_nh3['analyte'], sensor_nh3=self.sensor_nh3,
-                                             df=df_target)
-        dfNHx_target.columns = [i + ' target' for i in dfNHx_target.columns]
+        # calculate sensed response of individual analytes and TAN
+        df_target, dfNHx_calc = bs._other_analyte(analyte=self.sensor_nh3['analyte'], sensor_nh3=self.sensor_nh3,
+                                                  df_target=df_target, df_calc=df_res.filter(like='calc'))
 
-        dfNHx_calc = bs.individualAnalytes(analyte=self.sensor_nh3['analyte'], sensor_nh3=self.sensor_nh3,
-                                           df=df_res[['pH calc', 'TAN calc']])
-        dfNHx_calc.columns = [i + ' calc' for i in dfNHx_calc.columns]
-
-        # combine results
-        df_res = pd.concat([df_res[['Drift TAN mV', 'Drift pH mV', 'Potential TAN mV', 'Potential pH mV']],
-                            dfNHx_target, dfNHx_calc], axis=1).sort_index(axis=1)
+        # combine results and calculate TAN
+        df_res = pd.concat([df_res, dfNHx_calc[[self.sensor_nh3['additional'] + ' calc', 'TAN calc']]], axis=1).sort_index(axis=1)
+        self.df_res = df_res.sort_index(axis=1)
 
         # --------------------------------------------------------------------------------------------------------------
         # plotting part | individual sensor - target vs record
-        fig_pH = plot_phsensor(df_res=df_res, fig=self.fig_phsim, ax=self.ax_phsim)
-        fig_NHx = plot_NHxsensor(df_res=df_res, fig=self.fig_nh3sim, ax=self.ax_nh3sim, ax1=self.ax1_nh3sim)
+        fig_pH = plot_phsensor(df_res=self.df_res, fig=self.fig_phsim, ax=self.ax_phsim)
+        fig_NHx = plot_NHxsensor(df_res=self.df_res, fig=self.fig_nh3sim, ax=self.ax_nh3sim, ax1=self.ax1_nh3sim)
 
         # final TAN model
-        fig_tan = plot_tanModel(df_res=df_res, fig1=self.fig_tansim, ax1=self.ax_tansim)
+        fig_tan = plot_tanModel(df_res=self.df_res, fig1=self.fig_tansim, ax1=self.ax_tansim)
 
         # --------------------------------------------------------------------------------------------------------------
         # collect for result output (save data)
-        self.df_data = df_data = df_res
         self.dic_figures = dict({'pH': fig_pH, 'NH3': fig_NHx, 'TAN': fig_tan})
 
 
@@ -861,7 +819,7 @@ def plot_phsensor(df_res, fig=None, ax=None):
         ax.cla()
     ax.set_xlabel('Time / s'), ax.set_ylabel('pH value')
 
-    ax.plot(df_res['pH target'].dropna(), ls='-.', lw=1., color='gray')
+    ax.plot(df_res['target pH'].dropna(), ls='-.', lw=1., color='gray')
     ax.plot(df_res['pH calc'].dropna(), color=dcolor['pH'])
 
     ax.set_xlim(-0.5, df_res['pH calc'].dropna().index[-1]*1.05)
@@ -882,10 +840,10 @@ def plot_NHxsensor(df_res, fig=None, ax=None, ax1=None):
     ax.set_ylabel('NH$_4^+$ / ppm', color=dcolor['NH4'])
     ax1.set_ylabel('NH$_3$ / ppm', color=dcolor['NH3'])
 
-    ax1.plot(df_res['NH3 target'].dropna(), lw=1., ls=':', color='gray', label='NH$_3$ target')
+    ax1.plot(df_res['target_ppm NH3'].dropna(), lw=1., ls=':', color='gray', label='NH$_3$ target')
     ax1.plot(df_res['NH3 calc'].dropna(), lw=1., color=dcolor['NH3'], label='NH$_3$')
 
-    ax.plot(df_res['NH4 target'].dropna(), lw=1., ls='--', color='grey', label='NH$_4^+$ target')
+    ax.plot(df_res['target_ppm NH4'].dropna(), lw=1., ls='--', color='grey', label='NH$_4^+$ target')
     ax.plot(df_res['NH4 calc'].dropna(), lw=1., color=dcolor['NH4'], label='NH$_4^+$')
 
     ax.set_xlim(-0.5, df_res['NH4 calc'].dropna().index[-1] * 1.05)
@@ -904,7 +862,7 @@ def plot_tanModel(df_res, fig1=None, ax1=None):
     sns.despine()
     ax1.set_xlabel('Time / s'), ax1.set_ylabel('TAN / ppm')
 
-    ax1.plot(df_res['TAN target'].dropna(), lw=1., ls=ls['target'], color='k', label='TAN target')
+    ax1.plot(df_res['target_ppm TAN'].dropna(), lw=1., ls=ls['target'], color='k', label='TAN target')
     ax1.plot(df_res['TAN calc'].dropna(), lw=1., color=dcolor['TAN'], label='TAN')
 
     ax1.set_xlim(-0.5, df_res['TAN calc'].dropna().index[-1] * 1.05)

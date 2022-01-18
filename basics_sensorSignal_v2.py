@@ -78,11 +78,15 @@ def lin_regression(cnh3_min, cnh3_max, sigNH3_bgd, sigNH3_max, conc_step=0.1):
     return arg
 
 
-def _calibration_nh3(anh3_min, anh3_max, anh3_step, sigNH3_bgd, sigNH3_max):
+def _calibration_nhx(Emax, cmax):
+    # version1: anhx_min, anhx_max, anhx_step, sigNHx_bgd, sigNHx_max):
     # linear regression for all pH values
-    nh3_cali = lin_regression(cnh3_min=anh3_min, cnh3_max=anh3_max, conc_step=anh3_step, sigNH3_bgd=sigNH3_bgd,
-                              sigNH3_max=sigNH3_max)
-    return nh3_cali
+    #nhx_cali = lin_regression(cnh3_min=anhx_min, cnh3_max=anhx_max, conc_step=anhx_step, sigNH3_bgd=sigNHx_bgd,
+    #                          sigNH3_max=sigNHx_max)
+    # Nernst equation with slope -59mV: E = E0 - 59mV/z * log10(c)
+    E0 = Emax + (59/n * np.log(cmax))
+    para = dict({'slope': 59, 'E0': E0})
+    return para
 
 
 def henderson_nh3(pH, c_nh4, pKa=9.25):
@@ -118,7 +122,7 @@ def henderson_TAN4NH4(pH, c_tan, pKa=9.25):
 
 
 # --------------------------------------------------------------------------------------------------------------------
-def _target_fluctuation(ls_conc, tstart, tstop, nP=1, steps=0.05):
+def _target_fluctuation(ls_conc, tstart, tstop, analyte, nP=1, steps=0.05):
     """
     Function for periodic block-change of concentration
     :param cnh4_low:  minimal ammonium concentration
@@ -131,6 +135,7 @@ def _target_fluctuation(ls_conc, tstart, tstop, nP=1, steps=0.05):
     :return:
     """
 
+
     N = ((tstop - tstart) / steps) + 1
     P = N / nP
     D = P / 2
@@ -138,6 +143,7 @@ def _target_fluctuation(ls_conc, tstart, tstop, nP=1, steps=0.05):
     # when ls_conc has more than 1 entry -> step function
     ls_sig = list(map(lambda n: list((np.arange(N) % P < D) * (ls_conc[n] - ls_conc[n + 1]) + ls_conc[n + 1]),
                       range(len(ls_conc) - 1)))
+
     x0 = np.arange(0, tstop + steps, steps)
     dsig = dict()
     for i in range(len(ls_sig)):
@@ -145,7 +151,7 @@ def _target_fluctuation(ls_conc, tstart, tstop, nP=1, steps=0.05):
             x = x0
         else:
             x = np.arange((x0[-1]/2+steps)*i, x0[-1]/2*i + steps*(i+1) + x0[-1], steps)
-        dsig[i] = pd.DataFrame(ls_sig[i], columns=['signal'], index=x)
+        dsig[i] = pd.DataFrame(ls_sig[i], columns=['signal ' + analyte], index=x)
 
     df_target = pd.concat(dsig, axis=0)
     trange = [i[1] for i in df_target.index]
@@ -159,7 +165,29 @@ def _target_fluctuation(ls_conc, tstart, tstop, nP=1, steps=0.05):
     # finalize output
     df_target.index.name = 'time/s'
 
-    return df_target, df_target.index, D
+    return df_target
+
+
+def target_fluctuation(ls_conc, tstart, tstop, analyte, nP=1, steps=0.05):
+    """
+    Function for periodic block-change of concentration
+    :param cnh4_low:  minimal ammonium concentration
+    :param cnh4_high: maximal ammonium concentration
+    :param tstart:    start time of the period (in s)
+    :param tstop:     stop time of the period (in s)
+    :param nP:        frequency; number of cycles/period
+    :param N:         sample count; a multitude of the time period given
+    :param D:         width of pulse; usually half of the period P
+    :return:
+    """
+
+    if len(ls_conc) > 1:
+        df_target = _target_fluctuation(ls_conc=ls_conc, tstart=tstart, tstop=tstop, analyte=analyte, nP=nP,
+                                        steps=steps)
+    else:
+        x0 = np.arange(0, tstop/2 + steps, steps)
+        df_target = pd.DataFrame(ls_conc*len(x0), columns=['signal ' + analyte], index=x0)
+    return df_target
 
 
 def _target_concentration(ls_ph, ls_cNH3_ppm, ls_cNH4_ppm, t_plateau):
@@ -228,54 +256,34 @@ def _sensor_response(cplateau, psensor, tplateau):
 # --------------------------------------------------------------------------------------------------------------------
 def calibSensor_pH(target_ph, sensor_ph, para_meas):
     # pH sensor - targeted pH fluctuation in mV
-    df_sigpH_mV = pd.DataFrame(Nernst_equation(ls_ph=target_ph['signal'].to_numpy(), T=para_meas['temperature'],
+    df_sigpH_mV = pd.DataFrame(Nernst_equation(ls_ph=target_ph['target pH'].to_numpy(), T=para_meas['temperature'],
                                                E0=sensor_ph['E0']), index=target_ph.index, columns=['potential mV'])
-
     # what are the specific signal levels
     cplateau = [Nernst_equation(ls_ph=p, T=para_meas['temperature'], E0=sensor_ph['E0'])
                 for p in sensor_ph['set values']]
     return df_sigpH_mV, cplateau
 
 
-def calibSensor_TAN(target_nhx, sensor_nh3):
+def calibSensor_NHx(target_nhx, sensor_nh3, analyte):
     # NHx sensor - targeted concentration fluctuation in mV
-    para_nh3 = _calibration_nh3(anh3_min=sensor_nh3['NHx calibration'][0], anh3_max=sensor_nh3['NHx calibration'][1],
-                                anh3_step=5, sigNH3_bgd=sensor_nh3['signal min'], sigNH3_max=sensor_nh3['signal max'])
-    df_sigTAN_mV = pd.DataFrame(target_nhx * para_nh3[0] + para_nh3[1])
-    df_sigTAN_mV.columns = ['potential mV']
+    para_nhx = _calibration_nhx(Emax=sensor_nh3['signal max ' + analyte], cmax=sensor_nh3['calib ' + analyte])
+    df_sigNHx_mV = pd.DataFrame(target_nhx['target_ppm ' + analyte] * para_nhx['slope'] + para_nhx['E0'])
+    df_sigNHx_mV.columns = ['potential mV ' + analyte]
 
     # what are the specific signal levels
-    cplateau = [t * para_nh3[0] + para_nh3[1] for t in sensor_nh3['set values']]
-    return df_sigTAN_mV, cplateau, para_nh3
+    cplateau = [t * para_nhx['slope'] + para_nhx['E0'] for t in sensor_nh3['set values']]
+    return df_sigNHx_mV, cplateau, para_nhx
 
 
-def _alignSensorSettings(target_ph, target_nhx, sensor_ph, sensor_nh3, para_meas):
+def _alignSensorSettings(df_target, sensor_ph, sensor_nh3, para_meas):
     # individual sensor calibration
-    df_sigpH_mV, cplateaupH = calibSensor_pH(target_ph=target_ph, sensor_ph=sensor_ph, para_meas=para_meas)
-    df_sigTAN_mV, cplateauTAN, para_nh3 = calibSensor_TAN(target_nhx=target_nhx, sensor_nh3=sensor_nh3)
-
-    # align number of plateaus
-    if len(cplateaupH) == len(cplateauTAN):
-        pass
-    elif len(cplateaupH) < len(cplateauTAN):
-        if len(cplateaupH) == 1:
-            cplateaupH = cplateaupH * len(cplateauTAN)
-            df_sigpH_mV = pd.DataFrame(Nernst_equation(ls_ph=target_ph['signal'].to_numpy(), T=para_meas['temperature'],
-                                                       E0=sensor_ph['E0']), index=df_sigTAN_mV.index,
-                                       columns=['potential mV'])
-        else:
-            print('requires a more complex idea')
-    elif len(cplateaupH) > len(cplateauTAN):
-        if len(cplateauTAN) == 1:
-            cplateauTAN = cplateauTAN * len(cplateaupH)
-            df_sigTAN_mV = pd.DataFrame(df_sigpH_mV.index * para_nh3[0] + para_nh3[1], index=df_sigpH_mV.index)
-        else:
-            print('requires a more complex idea')
-
-    df_res = pd.concat([df_sigpH_mV, df_sigTAN_mV], axis=1)
-    df_res.columns = ['Potential pH mV', 'Potential TAN mV']
-
-    return df_res, cplateaupH, cplateauTAN, para_nh3
+    df_sigpH_mV, cplateaupH = calibSensor_pH(target_ph=df_target, sensor_ph=sensor_ph, para_meas=para_meas)
+    df_sigNHx_mV, cplateauNHx, para_nhx = calibSensor_NHx(target_nhx=df_target, sensor_nh3=sensor_nh3,
+                                                          analyte=sensor_nh3['analyte'])
+    df_ = pd.concat([df_sigpH_mV, df_sigNHx_mV], axis=1)
+    df_.columns = ['Potential mV pH', 'Potential mV ' + sensor_nh3['analyte']]
+    df_res = pd.concat([df_target, df_], axis=1)
+    return df_res, cplateaupH, cplateauNHx, para_nhx
 
 
 def pH_sensor(cplateau, sensor_ph, para_meas):
@@ -294,16 +302,16 @@ def pH_sensor(cplateau, sensor_ph, para_meas):
     return df_pHrec, df_pHdrift, df_recalc
 
 
-def NHx_sensor(analyte, cplateau, sensor_nh3, para_nh3, para_meas):
+def NHx_sensor(cplateau, sensor_nh3, para_nhx, para_meas):
     # update concentration in case one analyte changes more often than the other one
     # include sensor response
     df_nhrec, df_nhdrift = _sensor_response(cplateau=cplateau, psensor=sensor_nh3, tplateau=para_meas['plateau time'])
-    df_nhdrift.columns = ['Drift TAN mV']
+    df_nhdrift.columns = ['Drift mV ' + sensor_nh3['analyte']]
 
     # -------------------------------------
     # re-calculate NHx from potential
-    df_recalc = pd.DataFrame((df_nhdrift - para_nh3[1]) / para_nh3[0])
-    df_recalc.columns = [analyte + ' calc']
+    df_recalc = pd.DataFrame((df_nhdrift - para_nhx['E0']) / para_nhx['slope'])
+    df_recalc.columns = [sensor_nh3['analyte'] + ' calc']
     ind_new = [round(i, 2) for i in df_recalc.index]
     df_recalc.index = ind_new
 
@@ -313,21 +321,27 @@ def NHx_sensor(analyte, cplateau, sensor_nh3, para_nh3, para_meas):
 def _other_analyte(analyte, sensor_nh3, df_target, df_calc):
     if analyte == 'NH3':
         # based on target parameter
-        c_nhx = henderson_nh4(pKa=sensor_nh3['pKa'], pH=df_target['pH'].to_numpy(), c_nh3=df_target[analyte].to_numpy())
-        df_target['NH4'] = pd.DataFrame(c_nhx, index=df_target.index)
-        # based on sensor response
-        c_nhx = henderson_nh4(pH=df_calc['pH'].to_numpy(), c_nh3=df_calc[analyte].to_numpy(), pKa=sensor_nh3['pKa'])
-        df_calc['NH4'] = pd.DataFrame(c_nhx, index=df_calc.index)
+        c_nhx = henderson_nh4(pKa=sensor_nh3['pKa'], pH=df_target['target pH'].to_numpy(),
+                              c_nh3=df_target['target_ppm ' + analyte].to_numpy())
+        df_target.loc[:, 'NH4'] = c_nhx
 
+        # based on sensor response
+        c_nhx = henderson_nh4(pH=df_calc['pH calc'].to_numpy(), c_nh3=df_calc[analyte + ' calc'].to_numpy(),
+                              pKa=sensor_nh3['pKa'])
+
+        df_calc.loc[:, 'NH4 calc'] = c_nhx
+        df_calc.loc[:, 'TAN calc'] = df_calc['NH4 calc'].to_numpy() + df_calc['NH3 calc'].to_numpy()
     elif analyte == 'NH4':
         # based on target parameter
-        c_nhx = henderson_nh3(pKa=sensor_nh3['pKa'], pH=df_target['pH'].to_numpy(), c_nh4=df_target[analyte].to_numpy())
-        df_target['NH3'] = pd.DataFrame(c_nhx, index=df_target.index)
+        c_nhx = henderson_nh3(pKa=sensor_nh3['pKa'], pH=df_target['target pH'].to_numpy(),
+                              c_nh4=df_target['target_ppm ' + analyte].to_numpy())
+        df_target.loc[:, 'NH3'] = c_nhx
 
         # based on sensor response
-        c_nhx = henderson_nh3(pH=df_calc['pH'].to_numpy(), c_nh4=df_calc[analyte].to_numpy(), pKa=sensor_nh3['pKa'])
-        df_calc['NH3'] = pd.DataFrame(c_nhx, index=df_calc.index)
-
+        c_nhx = henderson_nh3(pH=df_calc['pH calc'].to_numpy(), c_nh4=df_calc[analyte + ' calc'].to_numpy(),
+                              pKa=sensor_nh3['pKa'])
+        df_calc.loc[:, 'NH3 calc'] = c_nhx
+        df_calc.loc[:, 'TAN calc'] = df_calc['NH4 calc'].to_numpy() + df_calc['NH3 calc'].to_numpy()
     else:
         df_target, df_calc = None, None
     return df_target, df_calc
@@ -346,14 +360,14 @@ def _tan_calculation(df_target, df_calc):
 def individualAnalytes(analyte, sensor_nh3, df):
     # prep data for same time range
     df_prep = df.dropna()
-    df_prep.columns = ['pH', 'TAN']
+
     # calculate individual analytes based on pH and TAN
     if analyte == 'NH3':
         # NH3 was measured
-        df_nh3 = pd.DataFrame(henderson_TAN4NH3(pH=df_prep['pH'].to_numpy(), c_tan=df_prep['TAN'].to_numpy(),
+        df_nh3 = pd.DataFrame(henderson_TAN4NH3(pH=df_prep['pH'].to_numpy(), c_tan=df_prep['NH4 calc'].to_numpy(),
                                                 pKa=sensor_nh3['pKa']), index=df_prep.index, columns=['NH3'])
         # NH4 as the difference
-        df_nh4 = pd.DataFrame(df_prep['TAN'] - df_nh3['NH3'], columns=['NH4'])
+        df_nh4 = pd.DataFrame(df_prep['NH4 calc'] - df_nh3['NH3'], columns=['NH4'])
     elif analyte == 'NH4':
         # NH4 was measured
         df_nh4 = pd.DataFrame(henderson_TAN4NH4(pH=df_prep['pH'].to_numpy(), c_tan=df_prep['TAN'].to_numpy(),
@@ -375,7 +389,7 @@ def move_figure(xnew, ynew):
     mngr.window.setGeometry(xnew, ynew, dx, dy)
 
 
-def save_report(para_meas, sensor_ph, sensor_nh3, dsens_record, dtarget):
+def save_report(para_meas, sensor_ph, sensor_nh3, df_res):
     df_p = pd.DataFrame(np.zeros(shape=(len(para_meas.values()), 2)))
     df_p[0] = list(para_meas.keys())
     df_p[1] = para_meas.values()
@@ -387,7 +401,7 @@ def save_report(para_meas, sensor_ph, sensor_nh3, dsens_record, dtarget):
     df_ph = pd.DataFrame(np.zeros(shape=(len(sensor_ph.values()), 2)))
     df_ph[0] = list(sensor_ph.keys())
     df_ph[1] = sensor_ph.values()
-    ph_target = list(dict.fromkeys(sensor_ph['pH target']['signal'].to_list()))
+    ph_target = list(dict.fromkeys(sensor_ph['pH target'].to_list()))
     df_ph.loc[7] = ['pH target', ph_target]
     df_ph.columns = ['parameter', 'values']
     df_ph.index = ['ph'] * len(df_ph.index)
@@ -395,24 +409,21 @@ def save_report(para_meas, sensor_ph, sensor_nh3, dsens_record, dtarget):
     df_nh3 = pd.DataFrame(np.zeros(shape=(len(sensor_nh3.values()), 2)))
     df_nh3[0] = list(sensor_nh3.keys())
     df_nh3[1] = sensor_nh3.values()
-    nhx_target = list(dict.fromkeys(sensor_nh3['nhx range']['signal'].to_list()))
-    df_nh3.loc[6] = ['nhx target', nhx_target]
+    nhx_target = list(dict.fromkeys(sensor_nh3['{} target'.format(sensor_nh3['analyte'])].to_list()))
+    df_nh3.loc[6] = ['{} target'.format(sensor_nh3['analyte']), nhx_target]
     df_nh3.columns = ['parameter', 'values']
-    df_nh3.index = ['nh3'] * len(df_nh3.index)
+    df_nh3.index = [sensor_nh3['analyte']] * len(df_nh3.index)
     df_para = pd.concat([df_p, df_ph, df_nh3])
+
     # ..................................................................
     # results
-    df_res_ = pd.DataFrame.from_dict(dsens_record)
-    df_ = pd.DataFrame.from_dict(dtarget)
-    df_.columns = ['TAN_target', '{}_target / ppm'.format(df_.columns[1].split(' ')[0]), 'pH_target']
+    df_calc = df_res.filter(like='calc') # pd.concat([df_, df_res_]).sort_index().T.sort_index().T
+    xnew = [int(i) for i in df_calc.index]
+    df_calc.index = xnew
+    df_calc = df_calc.groupby(df_calc.index).mean()
+    header_res = pd.DataFrame(df_calc.columns, columns=['Time / s'], index=df_calc.columns).T
 
-    df_res = pd.concat([df_, df_res_]).sort_index().T.sort_index().T
-    xnew = [int(i) for i in df_res.index]
-    df_res.index = xnew
-    df_res = df_res.groupby(df_res.index).mean()
-    header_res = pd.DataFrame(df_res.columns, columns=['Time / s'], index=df_res.columns).T
-
-    df_out = pd.concat([header_res, df_res])
+    df_out = pd.concat([header_res, df_calc])
     df_para.columns = [0, 1]
     df_out.columns = np.arange(0, len(df_out.columns))
 
@@ -450,7 +461,7 @@ def load_data(file):
 
     ls_nh3 = list()
     for l in ls_lines:
-        if l[0] == 'nh3':
+        if 'NH' in l[0]:
             ls_nh3.append(l[1:])
     df_nh3 = pd.DataFrame(ls_nh3, columns=['parameter', 'values'])
     df_nh3 = df_nh3.set_index('parameter')
