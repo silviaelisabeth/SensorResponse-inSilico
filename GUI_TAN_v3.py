@@ -41,9 +41,9 @@ sigNH3_bgd = 0.02            # background signal / offset in mV at 0M NH3
 nh3_res = 1e-9               # resolution of the NH3 sensor
 sbgd_nhx = 0.03              # background signal
 
-# !!!TODO: clean up all out commented parts
-# !!!TODO: finalize software to run it on all systems
-# !!!TODO: double-check calculation in mg/L! does it make sense?
+# !!! TODO: clean up all out commented parts
+# !!! TODO: finalize software to run it on all systems
+# !!! TODO: double-check calculation in mg/L! does it make sense?
 # !!! TODO: update save -> dataframe
 
 
@@ -115,13 +115,13 @@ class MainWindow(QMainWindow):
         # ---------------------------------------------------------------------------------------------------------
         # PARAMETERS
         # general settings
-        temperature_label, temperature_unit_label = QLabel(self), QLabel(self)
-        temperature_label.setText('Temperature')
-        temperature_unit_label.setText('degC')
-        self.temperature_edit = QLineEdit(self)
-        self.temperature_edit.setValidator(QDoubleValidator())
-        self.temperature_edit.setAlignment(Qt.AlignRight)
-        self.temperature_edit.setText('25.')
+        # temperature_label, temperature_unit_label = QLabel(self), QLabel(self)
+        # temperature_label.setText('Temperature')
+        # temperature_unit_label.setText('degC')
+        # self.temperature_edit = QLineEdit(self)
+        # self.temperature_edit.setValidator(QDoubleValidator())
+        # self.temperature_edit.setAlignment(Qt.AlignRight)
+        # self.temperature_edit.setText('25.')
 
         tsteady_label, tsteady_unit = QLabel(self), QLabel(self)
         tsteady_label.setText('Plateau time'), tsteady_unit.setText('s')
@@ -250,9 +250,9 @@ class MainWindow(QMainWindow):
         # add GroupBox to layout and load buttons in GroupBox
         hbox_ltop.addWidget(general_group)
         general_group.setLayout(grid_load)
-        grid_load.addWidget(temperature_label, 0, 0)
-        grid_load.addWidget(self.temperature_edit, 0, 1)
-        grid_load.addWidget(temperature_unit_label, 0, 2)
+        # grid_load.addWidget(temperature_label, 0, 0)
+        # grid_load.addWidget(self.temperature_edit, 0, 1)
+        # grid_load.addWidget(temperature_unit_label, 0, 2)
         grid_load.addWidget(tsteady_label, 1, 0)
         grid_load.addWidget(self.tsteady_edit, 1, 1)
         grid_load.addWidget(tsteady_unit, 1, 2)
@@ -351,6 +351,7 @@ class MainWindow(QMainWindow):
         self.fig_nh3sim, self.ax_nh3sim = plt.subplots()
         self.ax1_nh3sim = self.ax_nh3sim.twinx()
         self.canvas_nh3sim = FigureCanvasQTAgg(self.fig_nh3sim)
+        # self.navi_nh3sim = NavigationToolbar2QT(self.canvas_nh3sim, w, coordinates=False)
         self.ax_nh3sim.set_xlabel('Time / s')
         self.ax_nh3sim.set_ylabel('NH$_4^+$ / mg/L', color=dcolor['NH4'])
         self.ax1_nh3sim.set_ylabel('NH$_3$ / mg/L', color=dcolor['NH3'])
@@ -364,10 +365,12 @@ class MainWindow(QMainWindow):
         hbox_tleft.addWidget(nh3sim_group)
         nh3sim_group.setLayout(grid_nh3sim)
         grid_nh3sim.addWidget(self.canvas_nh3sim)
+        # grid_nh3sim.addWidget(self.navi_nh3sim)
 
         # TAN simulation
         self.fig_tansim, self.ax_tansim = plt.subplots()
         self.canvas_tansim = FigureCanvasQTAgg(self.fig_tansim)
+        # self.navi_tansim = NavigationToolbar2QT(self.canvas_tansim, w, coordinates=False)
         self.ax_tansim.set_xlabel('Time / s')
         self.ax_tansim.set_ylabel('TAN / mg/L')
         self.fig_tansim.tight_layout(pad=3.5, rect=(0, 0.05, 1, 1))
@@ -380,6 +383,7 @@ class MainWindow(QMainWindow):
         hbox_rbottom.addWidget(tansim_group)
         tansim_group.setLayout(grid_tansim)
         grid_tansim.addWidget(self.canvas_tansim)
+        # grid_tansim.addWidget(self.navi_tansim)
 
         # -------------------------------------------------------------------------------------------------------------
         self.show()
@@ -429,7 +433,7 @@ class MainWindow(QMainWindow):
     # ---------------------------------------------------
     def clear_parameters(self):
         # re-write default parameters
-        self.temperature_edit.setText('25.')
+        # self.temperature_edit.setText('25.')
         self.tsteady_edit.setText('75.')
         self.ph_edit.setText('8.4, 10.9')
         self.ph_t90_edit.setText('30.')
@@ -527,7 +531,7 @@ class MainWindow(QMainWindow):
             df_general, df_ph, df_nh3 = bs.load_data(fname)
 
             # set parameter to run the simulation
-            self.temperature_edit.setText(df_general.loc['temperature', 'values'])
+            # self.temperature_edit.setText(df_general.loc['temperature', 'values'])
             self.tsteady_edit.setText(df_general.loc['plateau time', 'values'])
 
             # pH sensor
@@ -570,7 +574,7 @@ class MainWindow(QMainWindow):
                 if self.df_res is None:
                     msgBox = QMessageBox()
                     msgBox.setIcon(QMessageBox.Information)
-                    msgBox.setText("Simulate before saving")
+                    msgBox.setText("Simulate before saving. Simulation might have been unsuccessful.")
                     msgBox.setWindowTitle("Warning")
                     msgBox.setStandardButtons(QMessageBox.Ok | QMessageBox.Cancel)
 
@@ -580,7 +584,7 @@ class MainWindow(QMainWindow):
                 else:
                     # save output now
                     output = bs.save_report(para_meas=self.para_meas, sensor_ph=self.sensor_ph, df_res=self.df_res,
-                                            sensor_nh3=self.sensor_nh3,)
+                                            sensor_nh3=self.sensor_nh3)
                     output.to_csv(fname_save, sep='\t', header=None)
 
                     # save figures in separate folder
@@ -696,7 +700,7 @@ class MainWindow(QMainWindow):
                                 'TAN target': df_target['signal TAN'], 'calib TAN': tan_calib, 'analyte': analyte,
                                 'additional': additional, 'signal min': sigNH3_bgd, 'signal max': sigNH3_max,
                                 'background signal': sbgd_nhx, 'set values': ls_cTAN_ppm})
-        self.para_meas = dict({'temperature': float(self.temperature_edit.text()),
+        self.para_meas = dict({#'temperature': float(self.temperature_edit.text()),
                                'plateau time': float(self.tsteady_edit.text())})
 
         # -----------------------------------------------------------------------------------------------------------

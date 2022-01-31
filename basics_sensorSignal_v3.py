@@ -26,6 +26,7 @@ R = 8.314         # [J/mol*K]
 F = 96485         # [C/mol]
 s_nernst = 2.303
 Tconvert = 273.15
+temp_std = 25
 
 dcolor = dict({'pH': '#1CC49A', 'sig pH': '#4B5258', 'NH3': '#196E94', 'sig NH3': '#314945',
                'NH4': '#DCA744', 'sig NH4': '#89621A', 'TAN': '#A86349'})
@@ -250,11 +251,10 @@ def _sensor_response(cplateau, psensor, tplateau, cstart):
 # --------------------------------------------------------------------------------------------------------------------
 def calibSensor_pH(target_ph, sensor_ph, para_meas):
     # pH sensor - targeted pH fluctuation in mV
-    df_sigpH_mV = pd.DataFrame(Nernst_equation(ls_ph=target_ph['target pH'].to_numpy(), T=para_meas['temperature'],
+    df_sigpH_mV = pd.DataFrame(Nernst_equation(ls_ph=target_ph['target pH'].to_numpy(), T=temp_std,
                                                E0=sensor_ph['E0']), index=target_ph.index, columns=['potential mV'])
     # what are the specific signal levels
-    cplateau = [Nernst_equation(ls_ph=p, T=para_meas['temperature'], E0=sensor_ph['E0'])
-                for p in sensor_ph['set values']]
+    cplateau = [Nernst_equation(ls_ph=p, T=temp_std, E0=sensor_ph['E0']) for p in sensor_ph['set values']]
     return df_sigpH_mV, cplateau
 
 
@@ -273,6 +273,7 @@ def _alignSensorSettings(df_target, sensor_ph, sensor_nh3, para_meas):
     # individual sensor calibration
     df_sigpH_mV, cplateaupH = calibSensor_pH(target_ph=df_target, sensor_ph=sensor_ph, para_meas=para_meas)
     df_sigNHx_mV, cplateauNHx, para_nhx = calibSensor_NHx(target_nhx=df_target, sensor_nh3=sensor_nh3)
+
     df_ = pd.concat([df_sigpH_mV, df_sigNHx_mV], axis=1)
     df_.columns = ['Potential mV pH', 'Potential mV TAN']
     df_res = pd.concat([df_target, df_], axis=1)
@@ -281,7 +282,7 @@ def _alignSensorSettings(df_target, sensor_ph, sensor_nh3, para_meas):
 
 def pH_sensor(cplateau, sensor_ph, para_meas):
     # include sensor response
-    cstart = Nernst_equation(ls_ph=sensor_ph['start pH'], E0=sensor_ph['E0'], T=para_meas['temperature'])
+    cstart = Nernst_equation(ls_ph=sensor_ph['start pH'], E0=sensor_ph['E0'], T=temp_std)
     df_pHrec, df_pHdrift = _sensor_response(cplateau=cplateau, psensor=sensor_ph, tplateau=para_meas['plateau time'],
                                             cstart=cstart)
     df_pHdrift.columns = ['Drift pH mV']
@@ -289,7 +290,7 @@ def pH_sensor(cplateau, sensor_ph, para_meas):
     # -------------------------------------
     # re-calculate pH from potential
     df_recalc = pd.DataFrame(Nernst_equation_invert(E=df_pHdrift['Drift pH mV'], E0=sensor_ph['E0'],
-                                                    T=para_meas['temperature']))
+                                                    T=temp_std))
     df_recalc.columns = ['pH calc']
     ind_new = [round(i, 2) for i in df_recalc.index]
     df_recalc.index = ind_new
