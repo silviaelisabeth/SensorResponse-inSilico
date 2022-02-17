@@ -7,11 +7,13 @@ import re
 from PyQt5.QtGui import *
 import matplotlib.pyplot as plt
 from PyQt5.QtWidgets import (QApplication, QWidget, QVBoxLayout, QHBoxLayout, QMainWindow, QPushButton, QAction, qApp,
-                             QGridLayout, QLabel, QLineEdit, QGroupBox, QFileDialog, QFrame, QMessageBox, QCheckBox)
+                             QGridLayout, QLabel, QLineEdit, QGroupBox, QFileDialog, QFrame, QMessageBox, QCheckBox,
+                             QDialog, QTableWidget, QTableWidgetItem)
 from PyQt5.QtGui import QIcon, QDoubleValidator
 from PyQt5.QtCore import Qt
 from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT, FigureCanvasQTAgg
 import numpy as np
+from scipy import integrate
 import seaborn as sns
 import pandas as pd
 import os
@@ -44,7 +46,7 @@ sbgd_nhx = 0.03              # background signal
 # !!! TODO: clean up all out commented parts
 # !!! TODO: finalize software to run it on all systems
 # !!! TODO: double-check calculation in mg/L! does it make sense?
-# !!! TODO: update save -> dataframe
+# !!! TODO: update save -> dataframe and include integral
 
 
 # .....................................................................................................................
@@ -52,8 +54,27 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super(MainWindow, self).__init__()
         self.initUI()
-        self.df_res = None
+        self.df_res, self.dres = None, dict()
         self.setWindowIcon(QIcon('icon.png'))
+
+        # -----------------------------------------------------------
+        # for all parameters - connect LineEdit with function
+        self.ph_t90_edit.returnPressed.connect(self.print_ph_t90)
+        self.nh3_t90_edit.returnPressed.connect(self.print_nh3_t90)
+        self.NH3_cbox.stateChanged.connect(self.NH3clickBox)
+        self.NH4_cbox.stateChanged.connect(self.NH4clickBox)
+
+        # connect buttons in navigation manager with functions
+        self.load_button.clicked.connect(self.load_data)
+        self.plot_button.clicked.connect(self.check_parameter)
+        self.int_button.clicked.connect(self.calc_integral)
+        self._integral_counter = 0
+        self.clearP_button.clicked.connect(self.clear_parameters)
+        self.clearF_button.clicked.connect(self.clear_phsim)
+        self.clearF_button.clicked.connect(self.clear_nh3timedrive)
+        self.clearF_button.clicked.connect(self.clear_tantimdrive)
+        self.save_button.clicked.connect(self.save)
+        self.saveR_button.clicked.connect(self.save_report)
 
     def initUI(self):
         # creating main window (GUI)
@@ -114,15 +135,6 @@ class MainWindow(QMainWindow):
 
         # ---------------------------------------------------------------------------------------------------------
         # PARAMETERS
-        # general settings
-        # temperature_label, temperature_unit_label = QLabel(self), QLabel(self)
-        # temperature_label.setText('Temperature')
-        # temperature_unit_label.setText('degC')
-        # self.temperature_edit = QLineEdit(self)
-        # self.temperature_edit.setValidator(QDoubleValidator())
-        # self.temperature_edit.setAlignment(Qt.AlignRight)
-        # self.temperature_edit.setText('25.')
-
         tsteady_label, tsteady_unit = QLabel(self), QLabel(self)
         tsteady_label.setText('Plateau time'), tsteady_unit.setText('s')
         self.tsteady_edit = QLineEdit(self)
@@ -166,8 +178,6 @@ class MainWindow(QMainWindow):
         # self.analyte = None
         self.NH3_cbox, self.NH4_cbox = QCheckBox('NH3', self), QCheckBox('NH4+', self)
         self.NH4_cbox.setChecked(True)
-        self.NH3_cbox.stateChanged.connect(self.NH3clickBox)
-        self.NH4_cbox.stateChanged.connect(self.NH4clickBox)
 
         nh3_t90_label, nh3_t90_unit = QLabel(self), QLabel(self)
         nh3_t90_label.setText('Response time')
@@ -203,6 +213,8 @@ class MainWindow(QMainWindow):
         self.inputFileLineEdit.setAlignment(Qt.AlignRight)
         self.plot_button = QPushButton('Plot', self)
         self.plot_button.setFixedWidth(100)
+        self.int_button = QPushButton('Integral', self)
+        self.int_button.setFixedWidth(100)
         self.clearP_button = QPushButton('Clear parameter', self)
         self.clearP_button.setFixedWidth(150)
         self.clearF_button = QPushButton('Clear plots', self)
@@ -219,6 +231,9 @@ class MainWindow(QMainWindow):
         vline2 = QFrame()
         vline2.setFrameShape(QFrame.VLine | QFrame.Raised)
         vline2.setLineWidth(2)
+        vline3 = QFrame()
+        vline3.setFrameShape(QFrame.VLine | QFrame.Raised)
+        vline3.setLineWidth(2)
 
         # -------------------------------------------------------------------------------------------
         # GroupBoxes to structure the layout
@@ -233,11 +248,13 @@ class MainWindow(QMainWindow):
         grid_load.addWidget(self.inputFileLineEdit, 0, 1)
         grid_load.addWidget(vline1, 0, 2)
         grid_load.addWidget(self.plot_button, 0, 3)
-        grid_load.addWidget(self.clearP_button, 0, 4)
-        grid_load.addWidget(self.clearF_button, 0, 5)
-        grid_load.addWidget(vline2, 0, 6)
-        grid_load.addWidget(self.save_button, 0, 7)
-        grid_load.addWidget(self.saveR_button, 0, 8)
+        grid_load.addWidget(self.int_button, 0, 4)
+        grid_load.addWidget(vline2, 0, 5)
+        grid_load.addWidget(self.clearP_button, 0, 6)
+        grid_load.addWidget(self.clearF_button, 0, 7)
+        grid_load.addWidget(vline3, 0, 8)
+        grid_load.addWidget(self.save_button, 0, 9)
+        grid_load.addWidget(self.saveR_button, 0, 10)
 
         # ----------------------------------------------
         # create GroupBox to structure the layout
@@ -250,9 +267,6 @@ class MainWindow(QMainWindow):
         # add GroupBox to layout and load buttons in GroupBox
         hbox_ltop.addWidget(general_group)
         general_group.setLayout(grid_load)
-        # grid_load.addWidget(temperature_label, 0, 0)
-        # grid_load.addWidget(self.temperature_edit, 0, 1)
-        # grid_load.addWidget(temperature_unit_label, 0, 2)
         grid_load.addWidget(tsteady_label, 1, 0)
         grid_load.addWidget(self.tsteady_edit, 1, 1)
         grid_load.addWidget(tsteady_unit, 1, 2)
@@ -313,28 +327,13 @@ class MainWindow(QMainWindow):
         nh3sens_group.setContentsMargins(1, 15, 15, 1)
         hbox_lbottom.addSpacing(10)
 
-        # for all parameters - connect LineEdit with function
-        self.ph_t90_edit.returnPressed.connect(self.print_ph_t90)
-        self.nh3_t90_edit.returnPressed.connect(self.print_nh3_t90)
-
-        # ----------------------------------------------------------------------------------------------------------------
-        # connect buttons in navigation manager with functions
-        self.load_button.clicked.connect(self.load_data)
-        self.plot_button.clicked.connect(self.check_parameter)
-        self.clearP_button.clicked.connect(self.clear_parameters)
-        self.clearF_button.clicked.connect(self.clear_phsim)
-        self.clearF_button.clicked.connect(self.clear_nh3timedrive)
-        self.clearF_button.clicked.connect(self.clear_tantimdrive)
-        self.save_button.clicked.connect(self.save)
-        self.saveR_button.clicked.connect(self.save_report)
-
         # ----------------------------------------------------------------------------------------------------------------
         # pH Simulation
         self.fig_phsim, self.ax_phsim = plt.subplots()
         self.canvas_phsim = FigureCanvasQTAgg(self.fig_phsim)
         self.ax_phsim.set_xlabel('Time / s')
         self.ax_phsim.set_ylabel('pH value')
-        self.fig_phsim.tight_layout(pad=3.5, rect=(0, 0.05, 1, 1))
+        self.fig_phsim.tight_layout(pad=1, rect=(0.05, 0.1, 1, 0.98))
         sns.despine()
 
         # create GroupBox to structure the layout
@@ -356,7 +355,7 @@ class MainWindow(QMainWindow):
         self.ax_nh3sim.set_ylabel('NH$_4^+$ / mg/L', color=dcolor['NH4'])
         self.ax1_nh3sim.set_ylabel('NH$_3$ / mg/L', color=dcolor['NH3'])
         self.ax_nh3sim.spines['top'].set_visible(False), self.ax1_nh3sim.spines['top'].set_visible(False)
-        self.fig_nh3sim.tight_layout(pad=3.5, rect=(0, 0.05, 1, 1))
+        self.fig_nh3sim.tight_layout(pad=1, rect=(0.05, 0.1, 0.95, 0.98))
 
         nh3sim_group = QGroupBox("NH3 / NH4+ Simulation")
         grid_nh3sim = QGridLayout()
@@ -373,7 +372,7 @@ class MainWindow(QMainWindow):
         # self.navi_tansim = NavigationToolbar2QT(self.canvas_tansim, w, coordinates=False)
         self.ax_tansim.set_xlabel('Time / s')
         self.ax_tansim.set_ylabel('TAN / mg/L')
-        self.fig_tansim.tight_layout(pad=3.5, rect=(0, 0.05, 1, 1))
+        self.fig_tansim.tight_layout(pad=.75, rect=(0, 0.1, 1, .95))
         sns.despine()
 
         tansim_group = QGroupBox("Total Ammonia Simulation")
@@ -405,16 +404,6 @@ class MainWindow(QMainWindow):
             if returnValue == QMessageBox.Ok:
                 pass
 
-    def print_nh3conc(self):
-        self.nh4_edit.setText('')
-        self.analyte = 'nh3'
-        print('analyte:', self.analyte, 'concentration:', self.nh3_edit.text())
-
-    def print_nh4conc(self):
-        self.nh3_edit.setText('')
-        self.analyte = 'nh4+'
-        print('analyte:', self.analyte, 'concentration:', self.nh4_edit.text())
-
     def print_nh3_t90(self):
         print('NH3 sensor response: ', self.nh3_t90_edit.text(), 's')
         # in case set response time equals 0, return warning
@@ -433,7 +422,6 @@ class MainWindow(QMainWindow):
     # ---------------------------------------------------
     def clear_parameters(self):
         # re-write default parameters
-        # self.temperature_edit.setText('25.')
         self.tsteady_edit.setText('75.')
         self.ph_edit.setText('8.4, 10.9')
         self.ph_t90_edit.setText('30.')
@@ -450,7 +438,7 @@ class MainWindow(QMainWindow):
         self.ax_phsim.cla()
         self.ax_phsim.set_xlabel('Time / s')
         self.ax_phsim.set_ylabel('pH value')
-        self.fig_phsim.tight_layout(pad=0.4, rect=(0, 0.05, 1, 1))
+        self.fig_phsim.tight_layout(pad=0.6, rect=(0., 0.015, 1, 0.98))
         sns.despine()
         self.fig_phsim.canvas.draw()
 
@@ -460,7 +448,7 @@ class MainWindow(QMainWindow):
         self.ax_nh3sim.set_xlabel('Time / s')
         self.ax_nh3sim.set_ylabel('NH$_4^+$ / mg/L', color=dcolor['NH4'])
         self.ax1_nh3sim.set_ylabel('NH$_3$ / mg/L', color=dcolor['NH3'])
-        self.fig_nh3sim.tight_layout(pad=0.4, rect=(0, 0.05, 1, 1))
+        self.fig_nh3sim.tight_layout(pad=0., rect=(0.015, 0.05, 0.98, 0.97))
         self.ax_nh3sim.spines['top'].set_visible(False), self.ax1_nh3sim.spines['top'].set_visible(False)
         self.fig_nh3sim.canvas.draw()
 
@@ -468,7 +456,7 @@ class MainWindow(QMainWindow):
         self.ax_tansim.cla()
         self.ax_tansim.set_xlabel('Time / s')
         self.ax_tansim.set_ylabel('TAN / mg/L')
-        self.fig_tansim.tight_layout(pad=0.4, rect=(0, 0.05, 1, 1))
+        self.fig_tansim.tight_layout(pad=.75, rect=(0.01, 0.01, 1, .95))
         sns.despine()
 
         self.fig_tansim.canvas.draw()
@@ -672,7 +660,6 @@ class MainWindow(QMainWindow):
 
         # get TAN concentration(s) and pH value(s) and align list of fluctuation points
         ls_cTAN_ppm = self._linEdit2list(line=self.TAN_edit.text())
-
         ls_ph = self._linEdit2list(line=self.ph_edit.text())
         ls_ph, ls_cTAN_ppm = self.align_concentrations(ls_ph=ls_ph, ls_cTAN_ppm=ls_cTAN_ppm)
 
@@ -734,8 +721,9 @@ class MainWindow(QMainWindow):
             pass
 
     def run_simulation(self):
-        # clear figures
+        # clear figures and xcorrds
         self.clear_phsim(), self.clear_nh3timedrive(), self.clear_tantimdrive()
+        self.ls_xcoords = []
 
         # target concentrations
         df_res = pd.concat([self.sensor_ph['pH target'], self.sensor_nh3['NH3 target'], self.sensor_nh3['NH4 target'],
@@ -762,7 +750,8 @@ class MainWindow(QMainWindow):
 
         # NHx sensor - calculate individual sensor response as well as TAN
         df_res = bs.NHxSensorcalc(df_res=df_res, analyte=self.sensor_nh3['analyte'], cplateauTAN=cplateauTAN,
-                                  df_pHcalc=df_pHcalc, sensor_nh3=self.sensor_nh3, para_meas=self.para_meas)
+                                  df_pHcalc=df_pHcalc, sensor_nh3=self.sensor_nh3, para_meas=self.para_meas,
+                                  sensor_ph=self.sensor_ph)
         self.df_res = df_res.sort_index(axis=1)
 
         # --------------------------------------------------------------------------------------------------------------
@@ -772,10 +761,166 @@ class MainWindow(QMainWindow):
 
         # final TAN model
         fig_tan = plot_tanModel(df_res=self.df_res, fig1=self.fig_tansim, ax1=self.ax_tansim)
+        # allow click events for TAN for integration (simpson for discrete measurement data)
+        self.fig_tansim.canvas.mpl_connect('button_press_event', self.onclick_integral)
 
         # --------------------------------------------------------------------------------------------------------------
         # collect for result output (save data)
         self.dic_figures = dict({'pH': fig_pH, 'NH3': fig_NHx, 'TAN': fig_tan})
+
+    def onclick_integral(self, event):
+
+        modifiers = QApplication.keyboardModifiers()
+        if modifiers != Qt.ControlModifier:  # change selected range
+            return
+        if len(self.ls_xcoords) >= 2:
+            self.ls_xcoords = list()
+
+        if event.xdata is None:
+            if len(self.ls_xcoords) < 2:
+                event.xdata = self.df_res.index.max()
+            else:
+                event.xdata = 0
+
+        self.ls_xcoords.append(event.xdata)
+        self.ax_tansim.vlines(x=self.ls_xcoords, ymin=self.df_res['TAN calc'].min(), ymax=self.df_res['TAN calc'].max(),
+                              color='k', lw=0.15)
+        if len(self.ls_xcoords) == 2:
+            self.ax_tansim.axvspan(self.ls_xcoords[0], self.ls_xcoords[1], color='grey', alpha=0.3)
+
+        # update figure plot
+        self.fig_tansim.canvas.draw()
+
+    def calc_integral(self):
+        self._integral_counter += 1
+        # calculate integral for calculated/target TAN using simpson's rule for discrete data
+        # subtract calculated TAN by target TAN
+        if len(self.ls_xcoords) == 2:
+            self.df4int = self.df_res[['TAN calc', 'target_mg/L TAN']].loc[min(self.ls_xcoords):max(self.ls_xcoords)]
+            dfint_calc = integrate.simpson(self.df4int['TAN calc'].to_numpy(), x=self.df4int.index, dx=0.05, axis=- 1)
+            dfint_target = integrate.simpson(self.df4int['target_mg/L TAN'].to_numpy(), x=self.df4int.index, dx=0.05,
+                                             axis=- 1)
+
+            # Integration range (s), target pH, target TAN, integral target TAN, integral TAN, error
+            result = list([(min(self.ls_xcoords), max(self.ls_xcoords)), self.df_res['target pH'].mean(),
+                           self.df_res['target_mg/L TAN'].mean(), dfint_calc, dfint_target,
+                           dfint_calc - dfint_target])
+
+            # add current results to dictionary (where all selected peak information are stored)
+            self.dres[self._integral_counter] = result
+
+            # open a pop up window with options to select what shall be saved
+            global wInt
+            wInt = IntegralWindow(self.dres, self._integral_counter)
+            if wInt.isVisible() is False:
+                wInt.show()
+
+
+class IntegralWindow(QDialog):
+    def __init__(self, res_int, count):
+        super().__init__()
+        self.result, self.count = res_int, count
+        self.initUI()
+
+        # when checkbox selected, save information in registered field
+        self.reset_button.clicked.connect(self.reset)
+        self.close_button.clicked.connect(self.close_window)
+
+        # execute function as soon as the window pups up or as soon as integral_button is clicked
+        self.res2table()
+
+    def initUI(self):
+        self.setWindowTitle("calculation error via integration")
+        self.setGeometry(150, 180, 700, 300) # x, y, width, height
+
+        # close window button
+        self.close_button = QPushButton('OK', self)
+        self.close_button.setFixedWidth(100), self.close_button.setFont(QFont('Helvetica Neue', 11))
+        self.reset_button = QPushButton('Reset', self)
+        self.reset_button.setFixedWidth(100), self.reset_button.setFont(QFont('Helvetica Neue', 11))
+        self.save_button = QPushButton('Save', self)
+        self.save_button.setFixedWidth(100), self.save_button.setFont(QFont('Helvetica Neue', 11))
+
+        # create table to store data
+        self.tab_report = QTableWidget(self)
+        self.tab_report.setColumnCount(6), self.tab_report.setRowCount(1)
+        self.tab_report.setHorizontalHeaderLabels(['Integration range (s)', 'target pH', 'target TAN',
+                                                   'integral target TAN', 'integral observed TAN', 'error'])
+        self.tab_report.resizeColumnsToContents()
+        self.tab_report.resizeRowsToContents()
+
+        # creating window layout
+        mlayout2 = QVBoxLayout()
+        vbox2_top, vbox2_middle, vbox2_bottom = QHBoxLayout(), QHBoxLayout(), QHBoxLayout()
+        mlayout2.addLayout(vbox2_top), mlayout2.addLayout(vbox2_middle), mlayout2.addLayout(vbox2_bottom)
+
+        # panel for integration results
+        table_grp = QGroupBox("Results")
+        grid_res = QGridLayout()
+        table_grp.setFont(QFont('Helvetica Neue', 10))
+        vbox2_top.addWidget(table_grp)
+        table_grp.setLayout(grid_res)
+
+        grid_res.addWidget(self.tab_report)
+        self.tab_report.adjustSize()
+
+        # vertical line
+        hline = QFrame()
+        hline.setFrameShape(QFrame.HLine | QFrame.Raised)
+        hline.setLineWidth(2)
+        vbox2_middle.addWidget(hline)
+
+        # navigation panel
+        navi_grp = QGroupBox("Navigation")
+        grid_navi = QGridLayout()
+        navi_grp.setFont(QFont('Helvetica Neue', 10))
+        vbox2_bottom.addWidget(navi_grp)
+        navi_grp.setLayout(grid_navi)
+
+        # include widgets in the layout
+        grid_navi.addWidget(self.close_button, 0, 0)
+        grid_navi.addWidget(self.reset_button, 0, 1)
+        grid_navi.addWidget(self.save_button, 0, 2)
+
+        # add everything to the window layout
+        self.setLayout(mlayout2)
+
+    def res2table(self):
+        # get the current row by counting the clicks on the integral button
+        x0 = self.count-1
+
+        # check whether row is empty (first column)
+        item = self.tab_report.item(x0, 0)
+        print('item at ', x0, ':', item, 'counter', self.count)
+        x = x0 if not item or not item.text() else x0 + 1
+
+        # add the number of rows according to keys in dictionary
+        self.tab_report.setRowCount(len(self.result.keys()))
+
+        # go through the dictionary and fill up the table (again)
+        for c in self.result.keys():
+            # columns: Integration range (s), target pH, target TAN, integral target TAN, integral TAN, error
+            for en in enumerate(self.result[c]):
+                if en[0] == 0:
+                    l = str(round(en[1][0], 2)) + ' - ' + str(round(en[1][1], 2))
+                else:
+                    l = str(round(en[1], 2))
+
+                item = QTableWidgetItem(l)
+                item.setTextAlignment(Qt.AlignRight)
+
+                # item structure: row, table, content
+                self.tab_report.setItem(c-1, en[0], item)
+        self.tab_report.resizeColumnsToContents(), self.tab_report.resizeRowsToContents()
+
+    def reset(self):
+        self.tab_report.clear()
+        self.tab_report.setHorizontalHeaderLabels(['Integration range (s)', 'target pH', 'target TAN',
+                                                   'integral target TAN', 'integral observed TAN', 'error'])
+        self.tab_report.setRowCount(1)
+
+    def close_window(self):
+        self.hide()
 
 
 # .....................................................................................................................
@@ -792,7 +937,7 @@ def plot_phsensor(df_res, fig=None, ax=None):
     ax.plot(df_res['pH calc'].dropna(), color=dcolor['pH'])
 
     ax.set_xlim(-0.5, df_res['pH calc'].dropna().index[-1]*1.05)
-    sns.despine(), fig.tight_layout(pad=1., rect=(0, 0, 1, 1))
+    sns.despine(), fig.tight_layout(pad=0.6, rect=(0., 0.015, 1, 0.98))
     fig.canvas.draw()
     return fig
 
@@ -816,7 +961,7 @@ def plot_NHxsensor(df_res, fig=None, ax=None, ax1=None):
     ax.plot(df_res['NH4 calc'].dropna(), lw=1., color=dcolor['NH4'], label='NH$_4^+$')
 
     ax.set_xlim(-0.5, df_res['NH4 calc'].dropna().index[-1] * 1.05)
-    sns.despine(), fig.tight_layout(pad=1., rect=(0, 0, 1, 1))
+    sns.despine(), fig.tight_layout(pad=0., rect=(0.015, 0.05, 0.98, 0.97))
     fig.canvas.draw()
     return fig
 
@@ -836,7 +981,7 @@ def plot_tanModel(df_res, fig1=None, ax1=None):
 
     ax1.set_xlim(-0.5, df_res['TAN calc'].dropna().index[-1] * 1.05)
 
-    fig1.tight_layout(pad=1.5, rect=(0, 0, 1, 1))
+    fig1.tight_layout(pad=.75, rect=(0.01, 0.005, 1, .95))
     fig1.canvas.draw()
     return fig1
 
@@ -857,3 +1002,7 @@ if __name__ == '__main__':
     view.setGeometry(50, 10, 1300, 750)
 
     sys.exit(app.exec_())
+
+
+#%%
+

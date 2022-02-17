@@ -146,6 +146,9 @@ def _target_fluctuation(ls_conc, tstart, tstop, analyte, nP=1, steps=0.05):
             x = x0
         else:
             x = np.arange((x0[-1]/2+steps)*i, x0[-1]/2*i + steps*(i+1) + x0[-1], steps)
+        # additional check to prevent crashing the software
+        if len(ls_sig[i]) != len(x):
+            x = x[:len(ls_sig[i])]
         dsig[i] = pd.DataFrame(ls_sig[i], columns=['signal ' + analyte], index=x)
 
     df_target = pd.concat(dsig, axis=0)
@@ -325,27 +328,36 @@ def NHx_sensor(cplateau, sensor_nh3, para_nhx, para_meas, analyte):
     return df_nhrec, df_nhdrift, df_recalc
 
 
-def NHxSensorcalc(df_res, analyte, cplateauTAN, df_pHcalc, sensor_nh3, para_meas):
+def NHxSensorcalc(df_res, analyte, cplateauTAN, df_pHcalc, sensor_nh3, para_meas, sensor_ph):
     if analyte == 'NH3':
         cNH3 = [df_res[df_res['Potential mV TAN'] == c]['target_mg/L NH3'].to_numpy() for c in cplateauTAN]
         ls_cNH3 = list()
         for li in cNH3:
             ls_cNH3 = np.append(ls_cNH3, li)
+
         [df_NH3rec, df_NH3calc] = NHx_sensors(cplateau=list(dict.fromkeys(ls_cNH3)), sensor_nh3=sensor_nh3,
                                               para_meas=para_meas, analyte='NH3')
         df_NH3calc.columns = ['NH3 calc']
-
         # calculate NH4 from Henderson-Hasselbalch and sensed pH
-        df_NH4calc = pd.DataFrame(henderson_nh4(pH=df_pHcalc['pH calc'].to_numpy(),
-                                                c_nh3=df_NH3calc['NH3 calc'].to_numpy(), pKa=sensor_nh3['pKa']),
+        df_NH4calc = pd.DataFrame(henderson_nh4(pH=df_pHcalc['pH calc'].to_numpy(), pKa=sensor_nh3['pKa'],
+                                                c_nh3=df_NH3calc['NH3 calc'].to_numpy()),
                                   index=[round(i, 2) for i in df_pHcalc.index], columns=['NH4 calc'])
     elif analyte == 'NH4':
         # cNH4 = df_res[df_res['Potential mV TAN'] == cplateauTAN[0]]['target_mg/L NH4'].to_numpy()
         cNH4 = [df_res[df_res['Potential mV TAN'] == c]['target_mg/L NH4'].to_numpy() for c in cplateauTAN]
+
         ls_cNH4 = list()
         for li in cNH4:
             ls_cNH4 = np.append(ls_cNH4, li)
-        [df_NH4rec, df_NH4calc] = NHx_sensors(cplateau=list(dict.fromkeys(ls_cNH4)), sensor_nh3=sensor_nh3,
+
+        # get the plateaus
+        ls_plateau = list()
+        for en in range(len(ls_cNH4)-1):
+            if en == 0:
+                ls_plateau.append(ls_cNH4[0])
+            if ls_cNH4[en] != ls_cNH4[en+1]:
+                ls_plateau.append(ls_cNH4[en+1])
+        [df_NH4rec, df_NH4calc] = NHx_sensors(cplateau=ls_plateau[:len(sensor_ph['set values'])], sensor_nh3=sensor_nh3,
                                               para_meas=para_meas, analyte='NH4')
         df_NH4calc.columns = ['NH4 calc']
 
