@@ -452,7 +452,57 @@ def move_figure(xnew, ynew):
     mngr.window.setGeometry(xnew, ynew, dx, dy)
 
 
-def save_report(para_meas, sensor_ph, sensor_nh3, df_res):
+def save_integral(para_meas, sensor_ph, sensor_nh3, dres):
+    # combine measurement parameter
+    df_meas1 = pd.DataFrame([para_meas['plateau time'], '-- ', 'pH'], index=['plateau time (s)', 'pKa', 'analyte'])
+    df_meas2 = pd.DataFrame([para_meas['plateau time'], sensor_nh3['pKa'],  sensor_nh3['analyte']],
+                            index=['plateau time (s)', 'pKa', 'analyte'])
+    df_meas = pd.concat([df_meas1, df_meas2], axis=1)
+    df_meas.loc['run simulation', :] = df_meas.columns
+    df_meas.columns = np.arange(len(df_meas.columns))
+
+    # combine sensor settings (pH and TAN)
+    df_pH = pd.DataFrame([str(sensor_ph['set values'])[1:-1], sensor_ph['t90'], sensor_ph['drift']])
+    df_TAN = pd.DataFrame([str(sensor_nh3['set values'])[1:-1], sensor_nh3['t90'], sensor_nh3['drift']])
+    df_settings = pd.concat([df_pH, df_TAN], axis=1)
+    df_settings.columns = np.arange(len(df_settings.columns))
+    df_settings.index = ['target values', 't90 (s)', 'drift (mV/s)']
+
+    # stepwise combination of measurement and sensor settings
+    df1 = pd.concat([df_meas, df_settings], axis=0)
+    df1 = df1.loc[['run simulation', 'analyte', 'plateau time (s)', 'pKa', 'target values', 't90 (s)', 'drift (mV/s)']]
+
+    # ------------------------------------------------------------
+    # integration results
+    int_out = pd.DataFrame.from_dict(dres)
+    int_out.index = ['Integration range (s)', 'target pH', 'target TAN (mg/L)', 'integral target TAN',
+                     'integral observed TAN', 'error']
+    int_out.loc['peaks', :] = list([i-1 for i in dres.keys()])
+    int_out.columns = np.arange(len(int_out.columns))
+    int_out = int_out.loc[['peaks', 'Integration range (s)', 'target pH', 'target TAN (mg/L)', 'integral target TAN',
+                           'integral observed TAN', 'error']]
+
+    # ------------------------------------------------------------
+    out = pd.concat([df1, int_out])
+
+    return out
+
+
+def save_report(para_meas, sensor_ph, sensor_nh3, dres, df_res):
+    # prep integral and settings for output
+    out = save_integral(para_meas=para_meas, sensor_ph=sensor_ph, sensor_nh3=sensor_nh3, dres=dres)
+
+    # sort df_res index
+    xold = list(df_res.index)
+    xnew = ['header']
+    [xnew.append(i) for i in xold]
+    df_res.loc['header', :] = df_res.columns
+    df_res = df_res.loc[xnew]
+
+    return out, df_res
+
+
+def save_report_OLD(para_meas, sensor_ph, sensor_nh3, df_res, df_int):
     df_p = pd.DataFrame(np.zeros(shape=(len(para_meas.values()), 2)))
     df_p[0] = list(para_meas.keys())
     df_p[1] = para_meas.values()
@@ -474,15 +524,15 @@ def save_report(para_meas, sensor_ph, sensor_nh3, df_res):
     df_nh3[1] = sensor_nh3.values()
     nhx_target = list(dict.fromkeys(sensor_nh3['{} target'.format(sensor_nh3['analyte'])].to_list()))
     df_nh3.loc[6] = ['{} target'.format(sensor_nh3['analyte']), nhx_target]
-    tan_target = list(dict.fromkeys(sensor_nh3['TAN target'].to_list()))
-    df_nh3.loc[7] = ['TAN target', tan_target]
+    # tan_target = list(dict.fromkeys(sensor_nh3['TAN target'].to_list()))
+    # df_nh3.loc[7] = ['TAN target', tan_target]
     df_nh3.columns = ['parameter', 'values']
     df_nh3.index = [sensor_nh3['analyte']] * len(df_nh3.index)
     df_para = pd.concat([df_p, df_ph, df_nh3])
 
     # ..................................................................
     # results
-    df_calc = df_res.filter(like='calc') # pd.concat([df_, df_res_]).sort_index().T.sort_index().T
+    df_calc = df_res.filter(like='calc')
     xnew = [int(i) for i in df_calc.index]
     df_calc.index = xnew
     df_calc = df_calc.groupby(df_calc.index).mean()
@@ -492,7 +542,10 @@ def save_report(para_meas, sensor_ph, sensor_nh3, df_res):
     df_para.columns = [0, 1]
     df_out.columns = np.arange(0, len(df_out.columns))
 
-    output = pd.concat([df_para, df_out])
+    # combine previous DataFrame and add integration list to the global list
+    df_int['index'] = df_int.index
+    df_int.loc['header', :] = df_int.columns.to_numpy()
+    output = pd.concat([df_para, df_out, df_int], axis=0, ignore_index=True)
 
     return output
 

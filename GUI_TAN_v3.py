@@ -215,6 +215,7 @@ class MainWindow(QMainWindow):
         self.plot_button.setFixedWidth(100)
         self.int_button = QPushButton('Integral', self)
         self.int_button.setFixedWidth(100)
+        self.int_button.setEnabled(False)
         self.clearP_button = QPushButton('Clear parameter', self)
         self.clearP_button.setFixedWidth(150)
         self.clearF_button = QPushButton('Clear plots', self)
@@ -572,8 +573,11 @@ class MainWindow(QMainWindow):
                 else:
                     # save output now
                     output = bs.save_report(para_meas=self.para_meas, sensor_ph=self.sensor_ph, df_res=self.df_res,
-                                            sensor_nh3=self.sensor_nh3)
-                    output.to_csv(fname_save, sep='\t', header=None)
+                                            sensor_nh3=self.sensor_nh3, dres=self.dres)
+                    with open(fname_save, 'w') as f:
+                        output[0].to_csv(f)
+                    with open(fname_save, 'a') as f:
+                        output[1].to_csv(f, header=False)
 
                     # save figures in separate folder
                     for f in self.dic_figures.keys():
@@ -615,10 +619,18 @@ class MainWindow(QMainWindow):
                     if returnValue == QMessageBox.Ok:
                         pass
                 else:
-                    # save output now
+                    # convert to DataFrame
+                    int_out = pd.DataFrame.from_dict(self.dres)
+                    int_out.index = ['Integration range (s)', 'target pH', 'target TAN', 'integral target TAN',
+                                     'integral observed TAN', 'error']
+                    # save output
                     output = bs.save_report(para_meas=self.para_meas, sensor_ph=self.sensor_ph, df_res=self.df_res,
-                                            sensor_nh3=self.sensor_nh3)
-                    output.to_csv(fname_save, sep='\t', header=None)
+                                            sensor_nh3=self.sensor_nh3, dres=self.dres)
+                    # output.to_csv(fname_save, sep='\t', header=None)
+                    with open(fname_save, 'w') as f:
+                        output[0].to_csv(f)
+                    with open(fname_save, 'a') as f:
+                        output[1].to_csv(f, header=False)
 
             except NameError:
                 msgBox = QMessageBox()
@@ -769,7 +781,6 @@ class MainWindow(QMainWindow):
         self.dic_figures = dict({'pH': fig_pH, 'NH3': fig_NHx, 'TAN': fig_tan})
 
     def onclick_integral(self, event):
-
         modifiers = QApplication.keyboardModifiers()
         if modifiers != Qt.ControlModifier:  # change selected range
             return
@@ -791,8 +802,16 @@ class MainWindow(QMainWindow):
         # update figure plot
         self.fig_tansim.canvas.draw()
 
+        # allow integral calculation as soon as xcoords have been collected
+        self.int_button.setEnabled(True)
+
     def calc_integral(self):
         self._integral_counter += 1
+        try:
+            self.ls_xcoords
+        except:
+            self.ls_xcoords = list()
+
         # calculate integral for calculated/target TAN using simpson's rule for discrete data
         # subtract calculated TAN by target TAN
         if len(self.ls_xcoords) == 2:
@@ -802,28 +821,30 @@ class MainWindow(QMainWindow):
                                              axis=- 1)
 
             # Integration range (s), target pH, target TAN, integral target TAN, integral TAN, error
-            result = list([(min(self.ls_xcoords), max(self.ls_xcoords)), self.df_res['target pH'].mean(),
-                           self.df_res['target_mg/L TAN'].mean(), dfint_calc, dfint_target,
-                           dfint_calc - dfint_target])
+            result = list([(round(min(self.ls_xcoords),2), round(max(self.ls_xcoords)),2),
+                           self.df_res['target pH'].mean(), self.df_res['target_mg/L TAN'].mean(), dfint_calc,
+                           dfint_target, dfint_calc - dfint_target])
 
             # add current results to dictionary (where all selected peak information are stored)
             self.dres[self._integral_counter] = result
 
             # open a pop up window with options to select what shall be saved
             global wInt
-            wInt = IntegralWindow(self.dres, self._integral_counter)
+            wInt = IntegralWindow(self.dres, self.para_meas, self.sensor_ph, self.sensor_nh3, self._integral_counter)
             if wInt.isVisible() is False:
                 wInt.show()
 
 
 class IntegralWindow(QDialog):
-    def __init__(self, res_int, count):
+    def __init__(self, res_int, para_meas, sensor_ph, sensor_nh3, count):
         super().__init__()
         self.result, self.count = res_int, count
+        self.para_meas, self.sensor_ph, self.sensor_nh3 = para_meas, sensor_ph, sensor_nh3
         self.initUI()
 
         # when checkbox selected, save information in registered field
         self.reset_button.clicked.connect(self.reset)
+        self.save_button.clicked.connect(self.save_integral)
         self.close_button.clicked.connect(self.close_window)
 
         # execute function as soon as the window pups up or as soon as integral_button is clicked
@@ -891,7 +912,6 @@ class IntegralWindow(QDialog):
 
         # check whether row is empty (first column)
         item = self.tab_report.item(x0, 0)
-        print('item at ', x0, ':', item, 'counter', self.count)
         x = x0 if not item or not item.text() else x0 + 1
 
         # add the number of rows according to keys in dictionary
@@ -917,7 +937,47 @@ class IntegralWindow(QDialog):
         self.tab_report.clear()
         self.tab_report.setHorizontalHeaderLabels(['Integration range (s)', 'target pH', 'target TAN',
                                                    'integral target TAN', 'integral observed TAN', 'error'])
-        self.tab_report.setRowCount(1)
+        self.tab_report.setRowCount(0)
+
+    def save_integral(self):
+        # opens window in current path. User input to define file name
+        fname_save = QFileDialog.getSaveFileName(self, 'Save File')[0]
+
+        if fname_save:
+            if '.txt' in fname_save or '.csv' in fname_save:
+                fname_save = fname_save.split('.')[0] + '_integral.txt'
+            else:
+                fname_save = fname_save + '_integral.txt'
+
+            # check whether we have data to save
+            try:
+                if self.result is None:
+                    msgBox = QMessageBox()
+                    msgBox.setIcon(QMessageBox.Information)
+                    msgBox.setText("Simulate before saving. Simulation might have been unsuccessful.")
+                    msgBox.setWindowTitle("Warning")
+                    msgBox.setStandardButtons(QMessageBox.Ok | QMessageBox.Cancel)
+
+                    returnValue = msgBox.exec()
+                    if returnValue == QMessageBox.Ok:
+                        pass
+                else:
+                    # save output now
+                    output = bs.save_integral(para_meas=self.para_meas, sensor_ph=self.sensor_ph, dres=self.result,
+                                              sensor_nh3=self.sensor_nh3)
+                    with open(fname_save, 'w') as f:
+                        output.to_csv(f)
+
+            except NameError:
+                msgBox = QMessageBox()
+                msgBox.setIcon(QMessageBox.Information)
+                msgBox.setText("Simulate before saving")
+                msgBox.setWindowTitle("Warning")
+                msgBox.setStandardButtons(QMessageBox.Ok | QMessageBox.Cancel)
+
+                returnValue = msgBox.exec()
+                if returnValue == QMessageBox.Ok:
+                    pass
 
     def close_window(self):
         self.hide()
@@ -1002,7 +1062,3 @@ if __name__ == '__main__':
     view.setGeometry(50, 10, 1300, 750)
 
     sys.exit(app.exec_())
-
-
-#%%
-
