@@ -13,7 +13,6 @@ This notice may not be removed or altered from any distribution.
 
 import numpy as np
 import pandas as pd
-import scipy as sp
 
 # --------------------------------------------------------------------------------------------------------------------
 # global parameter
@@ -67,7 +66,7 @@ def Nernst_equation_invert(E, E0, T=25):
     return (E0 - E / 1000) * n * F / (2.303 * R * (T + 273.15))
 
 
-def _calibration_nhx(Emax, cmax):
+def _calibration_electroSens(Emax, cmax):
     # Nernst equation with slope -59mV: E = E0 - 59mV/z * log10(c)
     E0 = Emax + (59/n * np.log(cmax))
     para = dict({'slope': 59, 'E0': E0})
@@ -211,21 +210,22 @@ def calibSensor_pH(target_ph, sensor_ph, para_meas):
     return df_sigpH_mV, cplateau
 
 
-def calibSensor_para(target_para, sensor_base):
-    # NHx sensor - targeted concentration fluctuation in mV
-    para_nhx = _calibration_nhx(Emax=sensor_base['signal max'], cmax=sensor_base['calib Total'])
-    df_sigNHx_mV = pd.DataFrame(target_para['target_mg/L Sum'] * para_nhx['slope'] + para_nhx['E0'])
-    df_sigNHx_mV.columns = ['potential mV Sum']
+def calibSensor_para(target_para, sensor2):
+    # sensor 2 - targeted concentration fluctuation in mV
+    para = _calibration_electroSens(Emax=sensor2['signal max'], cmax=sensor2['calib Total'])
+
+    df_sigSens2_mV = pd.DataFrame(target_para['target_mg/L Sum'] * para['slope'] + para['E0'])
+    df_sigSens2_mV.columns = ['potential mV Sum']
 
     # what are the specific signal levels
-    cplateau = [t * para_nhx['slope'] + para_nhx['E0'] for t in sensor_base['set values']]
-    return df_sigNHx_mV, cplateau, para_nhx
+    cplateau = [t * para['slope'] + para['E0'] for t in sensor2['set values']]
+    return df_sigSens2_mV, cplateau, para
 
 
-def _alignSensorSettings(df_target, sensor_ph, sensor_base, para_meas):
+def _alignSensorSettings(df_target, sensor_ph, sensor2, para_meas):
     # individual sensor calibration
     df_sigpH_mV, cplateaupH = calibSensor_pH(target_ph=df_target, sensor_ph=sensor_ph, para_meas=para_meas)
-    df_sigPara_mV, cplateauPara, para_para = calibSensor_para(target_para=df_target, sensor_base=sensor_base)
+    df_sigPara_mV, cplateauPara, para_para = calibSensor_para(target_para=df_target, sensor2=sensor2)
 
     df_ = pd.concat([df_sigpH_mV, df_sigPara_mV], axis=1)
     df_.columns = ['Potential mV pH', 'Potential mV Sum']
@@ -247,54 +247,98 @@ def pH_sensor(cplateau, sensor_ph, para_meas):
     return df_pHrec, df_recalc
 
 
-def para2_sensors(cplateau, sensor_Base, para_meas):
+def para2_sensors(cplateau, sensor2, para_meas):
     # update concentration in case one analyte changes more often than the other one
     # include sensor response
-    df_base_rec = _sensor_response(cplateau=cplateau, psensor=sensor_Base, tplateau=para_meas['plateau time'],
-                                   cstart=cplateau[0])
-    return df_base_rec
+    df2_rec = _sensor_response(cplateau=cplateau, psensor=sensor2, tplateau=para_meas['plateau time'],
+                               cstart=cplateau[0])
+    return df2_rec
 
 
-def para2Sensorcalc(df_res, analyte, cplateauSum, df_pHcalc, sensor_Base, para_meas, sensor_ph):
-    if analyte == 'NH3' or analyte == 'HS-':
+def para2Sensorcalc(df_res, analyte, cplateauSum, df_pHcalc, sensor2, para_meas, sensor_ph):
+    if analyte == 'base' or analyte == 'Base':
         cBase = [df_res[df_res['Potential mV Sum'] == c]['target_mg/L Base'].to_numpy() for c in cplateauSum]
         ls_cBase = list()
         for li in cBase:
             ls_cBase = np.append(ls_cBase, li)
-
-        df_base_calc = para2_sensors(cplateau=list(dict.fromkeys(ls_cBase)), sensor_Base=sensor_Base,
-                                    para_meas=para_meas)
+        df_base_calc = _sensor_response(cplateau=list(dict.fromkeys(ls_cBase)), psensor=sensor2,
+                                        tplateau=para_meas['plateau time'], cstart=list(dict.fromkeys(ls_cBase))[0])
         df_base_calc.columns = ['Base calc']
 
         # calculate acid species from Henderson-Hasselbalch and sensed pH
-        df_acid_calc = pd.DataFrame(henderson_acid(pH=df_pHcalc['pH calc'].to_numpy(), pKa=sensor_Base['pKa'],
+        df_acid_calc = pd.DataFrame(henderson_acid(pH=df_pHcalc['pH calc'].to_numpy(), pKa=sensor2['pKa'],
                                                    c_base=df_base_calc['Base calc'].to_numpy()), columns=['Acid calc'],
                                     index=[round(i, 2) for i in df_pHcalc.index])
-    elif analyte == 'NH4' or analyte == 'H2S':
+    elif analyte == 'acid' or analyte == 'Acid':
         cAcid = [df_res[df_res['Potential mV Sum'] == c]['target_mg/L Acid'].to_numpy() for c in cplateauSum]
         ls_cAcid = list()
         for li in cAcid:
             ls_cAcid = np.append(ls_cAcid, li)
-
-        # get the plateaus
-        ls_plateau = list()
-        for en in range(len(ls_cAcid)-1):
-            if en == 0:
-                ls_plateau.append(ls_cAcid[0])
-            if ls_cAcid[en] != ls_cAcid[en+1]:
-                ls_plateau.append(ls_cAcid[en+1])
-
-        df_acid_calc = para2_sensors(cplateau=ls_plateau[:len(sensor_ph['set values'])], sensor_Base=sensor_Base,
-                                     para_meas=para_meas)
+        df_acid_calc = _sensor_response(cplateau=list(dict.fromkeys(ls_cAcid)), psensor=sensor2,
+                                        tplateau=para_meas['plateau time'], cstart=list(dict.fromkeys(ls_cAcid))[0])
         df_acid_calc.columns = ['Acid calc']
 
+        # calculate base species from Henderson-Hasselbalch and sensed pH
+        df_base_calc = pd.DataFrame(henderson_base(pH=df_pHcalc['pH calc'].to_numpy(), pKa=sensor2['pKa'],
+                                                   c_acid=df_acid_calc['Acid calc'].to_numpy()), columns=['Base calc'],
+                                    index=[round(i, 2) for i in df_pHcalc.index])
+        # get the plateaus
+        # ls_plateau = list()
+        # for en in range(len(ls_cAcid) - 1):
+        #     if en == 0:
+        #         ls_plateau.append(ls_cAcid[0])
+        #     if ls_cAcid[en] != ls_cAcid[en + 1]:
+        #         ls_plateau.append(ls_cAcid[en + 1])
+        # cplateau = ls_plateau[:len(sensor_ph['set values'])]
+        # df_acid_calc = _sensor_response(cplateau=cplateau, psensor=sensor2, tplateau=para_meas['plateau time'],
+        #                                cstart=cplateau[0])
+        # df_acid_calc.columns = ['Acid calc']
+
         # calculate NH3 from Henderson-Hasselbalch and sensed pH
-        df_base_calc = pd.DataFrame(henderson_base(pH=df_pHcalc['pH calc'].to_numpy(), pKa=sensor_Base['pKa'],
-                                                  c_acid=df_acid_calc['Acid calc'].to_numpy()), columns=['Base calc'],
-                                  index=[round(i, 2) for i in df_pHcalc.index])
-    else:
-        print('Warning - no analyte defined')
-        df_acid_calc, df_base_calc = None, None
+        #df_base_calc = pd.DataFrame(henderson_base(pH=df_pHcalc['pH calc'].to_numpy(), pKa=sensor2['pKa'],
+        #                                           c_acid=df_acid_calc['Acid calc'].to_numpy()), columns=['Base calc'],
+        #                            index=[round(i, 2) for i in df_pHcalc.index])
+
+    #
+    # if analyte == 'NH3' or analyte == 'HS-':
+    #     cBase = [df_res[df_res['Potential mV Sum'] == c]['target_mg/L Base'].to_numpy() for c in cplateauSum]
+    #     ls_cBase = list()
+    #     for li in cBase:
+    #         ls_cBase = np.append(ls_cBase, li)
+    #
+    #     df_base_calc = para2_sensors(cplateau=list(dict.fromkeys(ls_cBase)), sensor_Base=sensor_Base,
+    #                                 para_meas=para_meas)
+    #     df_base_calc.columns = ['Base calc']
+    #
+    #     # calculate acid species from Henderson-Hasselbalch and sensed pH
+    #     df_acid_calc = pd.DataFrame(henderson_acid(pH=df_pHcalc['pH calc'].to_numpy(), pKa=sensor_Base['pKa'],
+    #                                                c_base=df_base_calc['Base calc'].to_numpy()), columns=['Acid calc'],
+    #                                 index=[round(i, 2) for i in df_pHcalc.index])
+    # elif analyte == 'NH4' or analyte == 'H2S':
+        # cAcid = [df_res[df_res['Potential mV Sum'] == c]['target_mg/L Acid'].to_numpy() for c in cplateauSum]
+        # ls_cAcid = list()
+        # for li in cAcid:
+        #     ls_cAcid = np.append(ls_cAcid, li)
+        #
+        # # get the plateaus
+        # ls_plateau = list()
+        # for en in range(len(ls_cAcid)-1):
+        #     if en == 0:
+        #         ls_plateau.append(ls_cAcid[0])
+        #     if ls_cAcid[en] != ls_cAcid[en+1]:
+        #         ls_plateau.append(ls_cAcid[en+1])
+        #
+        # df_acid_calc = para2_sensors(cplateau=ls_plateau[:len(sensor_ph['set values'])], sensor_Base=sensor_Base,
+        #                              para_meas=para_meas)
+        # df_acid_calc.columns = ['Acid calc']
+        #
+        # # calculate NH3 from Henderson-Hasselbalch and sensed pH
+        # df_base_calc = pd.DataFrame(henderson_base(pH=df_pHcalc['pH calc'].to_numpy(), pKa=sensor_Base['pKa'],
+        #                                           c_acid=df_acid_calc['Acid calc'].to_numpy()), columns=['Base calc'],
+        #                           index=[round(i, 2) for i in df_pHcalc.index])
+    # else:
+    #     print('Warning - no analyte defined')
+    #     df_acid_calc, df_base_calc = None, None
 
     df_sum_calc = pd.DataFrame(df_acid_calc['Acid calc'].to_numpy() + df_base_calc['Base calc'].to_numpy(),
                                index=[round(i, 2) for i in df_pHcalc.index], columns=['Sum calc'])
@@ -337,15 +381,19 @@ def save_integral(para_meas, sensor_ph, sensor_para2, dres, total_lbl):
     # ------------------------------------------------------------
     # integration results
     int_out = pd.DataFrame.from_dict(dres)
-    int_out.index = ['integration range (s)', 'target pH', 'target Sum (mg/L)', 'integral target Sum',
-                     'integral observed Sum', 'error']
-    int_out.loc['peaks', :] = list([i-1 for i in dres.keys()])
-    int_out.columns = np.arange(len(int_out.columns))
-    int_out = int_out.loc[['peaks', 'integration range (s)', 'target pH', 'target Sum (mg/L)', 'integral target Sum',
-                           'integral observed Sum', 'error']]
+    if int_out.empty:
+        out = df1
+    else:
+        int_out.index = ['integration range (s)', 'target pH', 'target Sum (mg/L)', 'integral target Sum',
+                         'integral observed Sum', 'error']
+        int_out.loc['peaks', :] = list([i-1 for i in dres.keys()])
+        int_out.columns = np.arange(len(int_out.columns))
+        int_out = int_out.loc[['peaks', 'integration range (s)', 'target pH', 'target Sum (mg/L)', 'integral target Sum',
+                               'integral observed Sum', 'error']]
 
-    # ------------------------------------------------------------
-    out = pd.concat([df1, int_out])
+        # ------------------------------------------------------------
+        out = pd.concat([df1, int_out])
+
     return out
 
 
