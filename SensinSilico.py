@@ -71,7 +71,7 @@ class MagicWizard(QWizard):
         self.setStyleSheet("color: white; background-color: #383e42")
 
         # add a background image
-        path = os.path.join(r'C://Users//shd-labuser-2018//Desktop//Python//Project_Fabi//py2exe//icon.png')
+        path = os.path.join(r'/Users/au652733/Python/Project_Fabi/py2exe/icon.icns')
         pixmap = QtGui.QPixmap(path)
         pixmap = pixmap.scaled(200, 200, QtCore.Qt.KeepAspectRatio, QtCore.Qt.SmoothTransformation)
         self.setPixmap(QWizard.BackgroundPixmap, pixmap)
@@ -107,7 +107,7 @@ class IntroPage(QWizardPage):
     def initUI(self):
         # path for measurement file (csv)
         self.load_button = QPushButton('Load meas. file', self)
-        self.load_button.setFixedWidth(150), self.load_button.setFont(QFont('Helvetica Neue', fs_font*0.7))
+        self.load_button.setFixedWidth(150), self.load_button.setFont(QFont('Helvetica Neue', int(fs_font*0.7)))
         self.inputFileLineEdit = QLineEdit(self)
         self.inputFileLineEdit.setValidator(QtGui.QDoubleValidator())
         self.inputFileLineEdit.setFixedWidth(375), self.inputFileLineEdit.setAlignment(Qt.AlignRight)
@@ -115,7 +115,7 @@ class IntroPage(QWizardPage):
 
         # directory to store files
         self.save_button = QPushButton('Storage path', self)
-        self.save_button.setFixedWidth(150), self.save_button.setFont(QFont('Helvetica Neue', fs_font*0.7))
+        self.save_button.setFixedWidth(150), self.save_button.setFont(QFont('Helvetica Neue', int(fs_font*0.7)))
         self.inputSaveLineEdit = QLineEdit(self)
         self.inputSaveLineEdit.setValidator(QtGui.QDoubleValidator())
         self.inputSaveLineEdit.setFixedWidth(375), self.inputSaveLineEdit.setAlignment(Qt.AlignRight)
@@ -369,18 +369,18 @@ class SimPage(QWizardPage):
 
         # general navigation
         self.plot_button = QPushButton('Plot', self)
-        self.plot_button.setFixedWidth(100), self.plot_button.setFont(QFont('Helvetica Neue', fs_font*0.7))
+        self.plot_button.setFixedWidth(100), self.plot_button.setFont(QFont('Helvetica Neue', int(fs_font*0.7)))
         self.int_button = QPushButton('Integral', self)
         self.int_button.setFixedWidth(100), self.int_button.setEnabled(False)
-        self.int_button.setFont(QFont('Helvetica Neue', fs_font*0.7))
+        self.int_button.setFont(QFont('Helvetica Neue', int(fs_font*0.7)))
         self.clearP_button = QPushButton('Clear parameter', self)
-        self.clearP_button.setFixedWidth(150),  self.clearP_button.setFont(QFont('Helvetica Neue', fs_font*0.7))
+        self.clearP_button.setFixedWidth(150),  self.clearP_button.setFont(QFont('Helvetica Neue', int(fs_font*0.7)))
         self.clearF_button = QPushButton('Clear plots', self)
-        self.clearF_button.setFixedWidth(100),  self.clearF_button.setFont(QFont('Helvetica Neue', fs_font*0.7))
+        self.clearF_button.setFixedWidth(100),  self.clearF_button.setFont(QFont('Helvetica Neue', int(fs_font*0.7)))
         self.save_button = QPushButton('Save all', self)
-        self.save_button.setFixedWidth(100),  self.save_button.setFont(QFont('Helvetica Neue', fs_font*0.7))
+        self.save_button.setFixedWidth(100),  self.save_button.setFont(QFont('Helvetica Neue', int(fs_font*0.7)))
         self.saveR_button = QPushButton('Save report', self)
-        self.saveR_button.setFixedWidth(100),  self.saveR_button.setFont(QFont('Helvetica Neue', fs_font*0.7))
+        self.saveR_button.setFixedWidth(100),  self.saveR_button.setFont(QFont('Helvetica Neue', int(fs_font*0.7)))
 
         # ---------------------------------------------------------------------------------------
         w = QWidget()
@@ -673,6 +673,7 @@ class SimPage(QWizardPage):
         self.para2_t90_edit.setText(self.para2_respT)
         self.para2_pka_edit.setText(self.para2_pka)
 
+        self.ax_phsim.cla(), self.ax_para2sim.cla(), self.ax_para3sim.cla(), self.ax_totalsim.cla()
         self.ax_para2sim.set_ylabel('{} / mg/L'.format(self.para2), color=dcolor['para2'])
         self.ax_para3sim.set_ylabel('{} / mg/L'.format(self.para3), color=dcolor['para3'])
         self.ax_totalsim.set_ylabel('{} / mg/L'.format(self.total_para), color=dcolor['font'])
@@ -681,7 +682,7 @@ class SimPage(QWizardPage):
         self.para2sim_group.setTitle("{}/{} Simulation".format(self.para2_grp, self.para3_grp))
         self.para23sens_group.setTitle("{}/{} Sensor Settings".format(self.para2_grp, self.para3_grp))
 
-        self.fig_para2sim.canvas.draw(), self.fig_totalsim.canvas.draw()
+        self.fig_phsim.canvas.draw(), self.fig_para2sim.canvas.draw(), self.fig_totalsim.canvas.draw()
 
         return
 
@@ -947,8 +948,7 @@ class SimPage(QWizardPage):
 
         # para2 sensor - calculate individual sensor response as well as total parameter
         df_res = bs.para2Sensorcalc(df_res=df_res, analyte=self.sensor_para2['analyte'], cplateauSum=cplateauTotal,
-                                    df_pHcalc=df_pHcalc, sensor2=self.sensor_para2, para_meas=self.para_meas,
-                                    sensor_ph=self.sensor_ph)
+                                    df_pHcalc=df_pHcalc, sensor2=self.sensor_para2, para_meas=self.para_meas)
         self.df_res = df_res.sort_index(axis=1)
 
         # --------------------------------------------------------------------------------------------------------------
@@ -1063,11 +1063,11 @@ class IntegralWindow(QDialog):
 
         # close window button
         self.close_button = QPushButton('OK', self)
-        self.close_button.setFixedWidth(100),  self.close_button.setFont(QFont('Helvetica Neue', fs_font*0.7))
+        self.close_button.setFixedWidth(100),  self.close_button.setFont(QFont('Helvetica Neue', int(fs_font*0.7)))
         self.reset_button = QPushButton('Reset', self)
-        self.reset_button.setFixedWidth(100), self.reset_button.setFont(QFont('Helvetica Neue', fs_font*0.7))
+        self.reset_button.setFixedWidth(100), self.reset_button.setFont(QFont('Helvetica Neue', int(fs_font*0.7)))
         self.save_button = QPushButton('Save', self)
-        self.save_button.setFixedWidth(100), self.save_button.setFont(QFont('Helvetica Neue', fs_font*0.7))
+        self.save_button.setFixedWidth(100), self.save_button.setFont(QFont('Helvetica Neue', int(fs_font*0.7)))
 
         # create table to store data
         self.tab_report = QTableWidget(self)
@@ -1285,7 +1285,7 @@ if __name__ == '__main__':
     import sys
 
     app = QtWidgets.QApplication(sys.argv)
-    path = os.path.join(r'C://Users//shd-labuser-2018//Desktop//Python//Project_Fabi//py2exe//icon.png')
+    path = os.path.join(r'/Users/au652733/Python/Project_Fabi/py2exe/icon.png')
     app.setWindowIcon(QIcon(path))
 
     # options available: 'Breeze', 'Oxygen', 'QtCurve', 'Windows', 'Fusion'
