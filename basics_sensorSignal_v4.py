@@ -201,13 +201,18 @@ def _sensor_response(cplateau, psensor, tplateau, cstart):
 
 
 def _all_plateaus_inlist(ls):
-    pos_jump = [list(np.diff(ls)).index(i) for i in list(dict.fromkeys(np.diff(ls)).keys())]
-    plateau = [np.mean(ls[pos_jump[en] + 1:pos_jump[en + 1]]) for en in range(len(pos_jump) - 1)]
+    ls_ = list()
+    for xi in [x for i,x in enumerate(np.diff(ls)) if x != 0]:
+        ls_ += (list(np.where(np.diff(ls) == xi)[0]))
+
+    pos_jump = [0] + sorted(list(dict.fromkeys(ls_))) + [len(ls)]
+    plateau = [np.mean(ls[pos_jump[en] + 1:pos_jump[en+1]]) for en in range(len(pos_jump)-1)]
+
     return plateau
 
 
 # --------------------------------------------------------------------------------------------------------------------
-def calibSensor_pH(target_ph, sensor_ph, para_meas):
+def calibSensor_pH(target_ph, sensor_ph):
     # pH sensor - targeted pH fluctuation in mV
     df_sigpH_mV = pd.DataFrame(Nernst_equation(ls_ph=target_ph['target pH'].to_numpy(), T=temp_std,
                                                E0=sensor_ph['E0']), index=target_ph.index, columns=['potential mV'])
@@ -228,9 +233,9 @@ def calibSensor_para(target_para, sensor2):
     return df_sigSens2_mV, cplateau, para
 
 
-def _alignSensorSettings(df_target, sensor_ph, sensor2, para_meas):
+def _alignSensorSettings(df_target, sensor_ph, sensor2):
     # individual sensor calibration
-    df_sigpH_mV, cplateaupH = calibSensor_pH(target_ph=df_target, sensor_ph=sensor_ph, para_meas=para_meas)
+    df_sigpH_mV, cplateaupH = calibSensor_pH(target_ph=df_target, sensor_ph=sensor_ph)
     df_sigPara_mV, cplateauPara, para_para = calibSensor_para(target_para=df_target, sensor2=sensor2)
 
     df_ = pd.concat([df_sigpH_mV, df_sigPara_mV], axis=1)
@@ -267,11 +272,11 @@ def para2Sensorcalc(df_res, analyte, cplateauSum, df_pHcalc, sensor2, para_meas)
         ls_cBase = list()
         for li in cBase:
             ls_cBase = np.append(ls_cBase, li)
-
         # find all plateaus even though they repeat themselves
-        ls_cBase = _all_plateaus_inlist(ls_cBase)
+        ls_cBase = _all_plateaus_inlist(ls_cBase)[:len(cplateauSum)]
+
         df_base_calc = _sensor_response(cplateau=ls_cBase, psensor=sensor2, tplateau=para_meas['plateau time'],
-                                        cstart=list(dict.fromkeys(ls_cBase))[0])
+                                        cstart=ls_cBase[0])
         df_base_calc.columns = ['Base calc']
 
         # calculate acid species from Henderson-Hasselbalch and sensed pH
@@ -281,14 +286,16 @@ def para2Sensorcalc(df_res, analyte, cplateauSum, df_pHcalc, sensor2, para_meas)
 
     elif analyte == 'acid' or analyte == 'Acid':
         cAcid = [df_res[df_res['Potential mV Sum'] == c]['target_mg/L Acid'].to_numpy() for c in cplateauSum]
+
         ls_cAcid = list()
         for li in cAcid:
             ls_cAcid = np.append(ls_cAcid, li)
-
         # find all plateaus even though they repeat themselves
-        ls_cAcid = _all_plateaus_inlist(ls_cAcid)
+        ls_cAcid = _all_plateaus_inlist(ls_cAcid)[:len(cplateauSum)]
+
         df_acid_calc = _sensor_response(cplateau=ls_cAcid, psensor=sensor2, tplateau=para_meas['plateau time'],
-                                        cstart=list(dict.fromkeys(ls_cAcid))[0])
+                                        cstart=ls_cAcid[0])
+
         df_acid_calc.columns = ['Acid calc']
 
         # calculate base species from Henderson-Hasselbalch and sensed pH

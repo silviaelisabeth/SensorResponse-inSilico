@@ -934,8 +934,7 @@ class SimPage(QWizardPage):
 
         # individual sensor - reduce by individual plotting (different function)
         [df_res, cplateaupH, cplateauTotal,
-         para_para] = bs._alignSensorSettings(sensor_ph=self.sensor_ph, sensor2=self.sensor_para2, df_target=df_res,
-                                              para_meas=self.para_meas)
+         para_para] = bs._alignSensorSettings(sensor_ph=self.sensor_ph, sensor2=self.sensor_para2, df_target=df_res)
         df_res.index = [round(u, 2) for u in df_res.index]
         df_res = df_res.dropna()
 
