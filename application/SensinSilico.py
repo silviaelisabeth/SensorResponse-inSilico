@@ -23,7 +23,7 @@ import os
 dcolor = dict({'pH': '#1CC49A', 'sig pH': '#4B5258', 'para2': '#196E94', 'sig para2': '#314945', 'para3': '#DCA744',
                'sig para3': '#89621A', 'total para': '#A86349', 'background': '#383e42', 'font': 'white'})
 ls = dict({'target': '-.', 'simulation': ':'})
-save_type = ['png', 'svg']
+save_type = ['jpg']
 fs_font = 12
 sns.set_context('paper', font_scale=1.)
 
@@ -71,7 +71,7 @@ class MagicWizard(QWizard):
         self.setStyleSheet("color: white; background-color: #383e42")
 
         # add a background image
-        path = os.path.join(r'/Users/au652733/Python/Project_Fabi/py2exe/icon.icns')
+        path = os.path.join(r'/Users/au652733/Python/2019-2022/Project_Fabi/py2exe/picture/icon.icns')
         pixmap = QtGui.QPixmap(path)
         pixmap = pixmap.scaled(200, 200, QtCore.Qt.KeepAspectRatio, QtCore.Qt.SmoothTransformation)
         self.setPixmap(QWizard.BackgroundPixmap, pixmap)
@@ -980,9 +980,12 @@ class SimPage(QWizardPage):
             return
         if len(self.ls_xcoords) >= 2:
             self.ls_xcoords, ls_xcoords = list(), list()
+            self.int_button.setEnabled(False)
+        else:
+            self.int_button.setEnabled(True)
 
         if event.xdata is None:
-            if len(self.ls_xcoords) < 2:
+            if len(self.ls_xcoords) <= 2:
                 event.xdata = self.df_res.index.max()
             else:
                 event.xdata = 0
@@ -1000,7 +1003,8 @@ class SimPage(QWizardPage):
         self.fig_totalsim.canvas.draw()
 
         # allow integral calculation as soon as xcoords have been collected
-        self.int_button.setEnabled(True)
+        if len(self.ls_xcoords) == 2:
+            self.int_button.setEnabled(True)
 
     def calc_integral(self):
         self._integral_counter += 1
@@ -1038,6 +1042,9 @@ class SimPage(QWizardPage):
             # update figure plot
             self.fig_totalsim.canvas.draw()
             self.vlines_list = list()
+
+            # disable Integral button til 2 xcoords are selected
+            self.int_button.setEnabled(False)
 
 
 class IntegralWindow(QDialog):
@@ -1178,6 +1185,7 @@ class IntegralWindow(QDialog):
                     pass
 
     def close_window(self):
+        self.res2table()
         self.hide()
 
 
@@ -1284,7 +1292,7 @@ if __name__ == '__main__':
     import sys
 
     app = QtWidgets.QApplication(sys.argv)
-    path = os.path.join(r'/Users/au652733/Python/Project_Fabi/py2exe/icon.png')
+    path = os.path.join(r'/Users/au652733/Python/2019-2022/Project_Fabi/py2exe/picture/icon.png')       
     app.setWindowIcon(QIcon(path))
 
     # options available: 'Breeze', 'Oxygen', 'QtCurve', 'Windows', 'Fusion'
