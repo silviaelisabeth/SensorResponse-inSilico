@@ -18,6 +18,7 @@ from scipy import integrate
 import pandas as pd
 import numpy as np
 import os
+import pathlib
 
 # .....................................................................................................................
 # global parameter
@@ -52,6 +53,7 @@ sbgd_nhx = 0.03            # background signal
 # others
 _integral_counter = 0       # helper scalar counting the integration
 dres = dict()               # simulation results 
+loc_path = os.getcwd()      # get the local path for relative directories
 
 wizard_page_index = {"IntroPage": 0, "SimPage": 1}
 
@@ -76,7 +78,8 @@ class MagicWizard(QWizard):
         self.setStyleSheet("color: white; background-color: #383e42")
 
         # add a background image
-        path = os.path.join(r'/Users/au652733/Python/2019-2022/Project_Fabi/py2exe/picture/icon.icns')
+        path = os.path.join(loc_path + r'/picture/icon.icns')
+
         pixmap = QtGui.QPixmap(path)
         pixmap = pixmap.scaled(200, 200, QtCore.Qt.KeepAspectRatio, QtCore.Qt.SmoothTransformation)
         self.setPixmap(QWizard.BackgroundPixmap, pixmap)
@@ -1306,7 +1309,7 @@ if __name__ == '__main__':
     import sys
 
     app = QtWidgets.QApplication(sys.argv)
-    path = os.path.join(r'/Users/au652733/Python/2019-2022/Project_Fabi/py2exe/picture/icon.png')       
+    path = os.path.join(loc_path + r'/picture/icon.png')       
     app.setWindowIcon(QIcon(path))
 
     # options available: 'Breeze', 'Oxygen', 'QtCurve', 'Windows', 'Fusion'
