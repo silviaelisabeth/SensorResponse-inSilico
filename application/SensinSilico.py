@@ -16,6 +16,7 @@ from matplotlib.backends.backend_qt5agg import (FigureCanvasQTAgg as FigureCanva
                                                 NavigationToolbar2QT as NavigationToolbar)
 from scipy import integrate
 import pandas as pd
+import numpy as np
 import os
 
 # .....................................................................................................................
@@ -47,6 +48,10 @@ sigBase_max = 0.09         # maximal signal at maximal analyte concentration in 
 sigBase_bgd = 0.02         # background signal / offset in mV at 0M base
 base_res = 1e-9            # resolution of the base sensor
 sbgd_nhx = 0.03            # background signal
+
+# others
+_integral_counter = 0       # helper scalar counting the integration
+dres = dict()               # simulation results 
 
 wizard_page_index = {"IntroPage": 0, "SimPage": 1}
 
@@ -308,7 +313,8 @@ class SimPage(QWizardPage):
         self.setTitle("in silico Simulation")
 
         # define certain parameter and gather from intro page
-        self.df_res, self.dres = None, dict()
+        global dres
+        self.df_res = None
 
         # general layout
         self.initUI()
@@ -322,7 +328,6 @@ class SimPage(QWizardPage):
         # connect buttons in navigation manager with functions
         self.plot_button.clicked.connect(self.check_parameter)
         self.int_button.clicked.connect(self.calc_integral)
-        self._integral_counter = 0
         self.clearP_button.clicked.connect(self.clear_parameters)
         self.clearF_button.clicked.connect(self.clear_phsim)
         self.clearF_button.clicked.connect(self.clear_para2timedrive)
@@ -826,16 +831,17 @@ class SimPage(QWizardPage):
                     pass
 
     def save2txt(self, fname_save):
+        global dres
         # if integral available, convert to DataFrame
-        if len(self.dres.keys()) != 0:
-            int_out = pd.DataFrame.from_dict(self.dres)
+        if len(dres.keys()) != 0:
+            int_out = pd.DataFrame.from_dict(dres)
             int_out.index = ['integration range (s)', 'target pH', 'target Sum', 'integral target Sum',
                              'integral observed Sum', 'error']
         else:
             int_out = None
 
         # save output
-        output = bs.save_report(para_meas=self.para_meas, sensor_ph=self.sensor_ph, df_res=self.df_res, dres=self.dres,
+        output = bs.save_report(para_meas=self.para_meas, sensor_ph=self.sensor_ph, df_res=self.df_res, dres=dres,
                                 sensor_para2=self.sensor_para2, total_lbl=self.total_para_grp)
 
         with open(fname_save, 'w') as f:
@@ -1007,7 +1013,8 @@ class SimPage(QWizardPage):
             self.int_button.setEnabled(True)
 
     def calc_integral(self):
-        self._integral_counter += 1
+        global dres, _integral_counter
+        _integral_counter += 1
         try:
             self.ls_xcoords
         except:
@@ -1026,12 +1033,11 @@ class SimPage(QWizardPage):
                            self.df_res['target_mg/L Sum'].mean(), dfint_calc, dfint_target, dfint_calc - dfint_target])
 
             # add current results to dictionary (where all selected peak information are stored)
-            self.dres[self._integral_counter] = result
+            dres[_integral_counter] = result
 
             # open a pop up window with options to select what shall be saved
             global wInt
-            wInt = IntegralWindow(self.dres, self.para_meas, self.sensor_ph, self.sensor_para2, self.total_para_grp,
-                                  self._integral_counter)
+            wInt = IntegralWindow(self.para_meas, self.sensor_ph, self.sensor_para2, self.total_para_grp)
             if wInt.isVisible() is False:
                 wInt.show()
 
@@ -1048,9 +1054,9 @@ class SimPage(QWizardPage):
 
 
 class IntegralWindow(QDialog):
-    def __init__(self, res_int, para_meas, sensor_ph, sensor_para2, sum_lbl, count):
+    def __init__(self, para_meas, sensor_ph, sensor_para2, sum_lbl):
         super().__init__()
-        self.result, self.count, self.sum_lbl = res_int, count, sum_lbl
+        self.sum_lbl = sum_lbl
         self.para_meas, self.sensor_ph, self.sensor_para2 = para_meas, sensor_ph, sensor_para2
         self.initUI()
 
@@ -1121,20 +1127,22 @@ class IntegralWindow(QDialog):
         self.setLayout(mlayout2)
 
     def res2table(self):
+        global dres, _integral_counter  
         # get the current row by counting the clicks on the integral button
-        x0 = self.count-1
+        x0 = _integral_counter-1
 
         # check whether row is empty (first column)
         item = self.tab_report.item(x0, 0)
         x = x0 if not item or not item.text() else x0 + 1
+        item = self.tab_report.item(x, 0)
 
         # add the number of rows according to keys in dictionary
-        self.tab_report.setRowCount(len(self.result.keys()))
+        self.tab_report.setRowCount(len(dres.keys()))
 
         # go through the dictionary and fill up the table (again)
-        for c in self.result.keys():
+        for c in dres.keys():
             # columns: Integration range (s), target pH, target Sum, integral target Sum, integral Sum, error
-            for en in enumerate(self.result[c]):
+            for en in enumerate(dres[c]):
                 if en[0] == 0:
                     l = str(round(en[1][0], 2)) + ' - ' + str(round(en[1][1], 2))
                 else:
@@ -1148,10 +1156,17 @@ class IntegralWindow(QDialog):
         self.tab_report.resizeColumnsToContents(), self.tab_report.resizeRowsToContents()
 
     def reset(self):
+        global dres, _integral_counter
+
+        for c in np.linspace(1, _integral_counter, num=int((_integral_counter-1)/1+1)):
+            dres.pop(c)
+        _integral_counter = 0
+
+        # when reset - reset counter and drop previously selected area from dres
         self.tab_report.clear()
         self.tab_report.setHorizontalHeaderLabels(['integration range (s)', 'target pH', 'target Sum',
                                                    'integral target Sum', 'integral observed Sum', 'error'])
-        self.tab_report.setRowCount(0)
+        self.tab_report.setRowCount(1)
 
     def save_integral(self):
         # opens window in current path. User input to define file name
@@ -1185,7 +1200,6 @@ class IntegralWindow(QDialog):
                     pass
 
     def close_window(self):
-        self.res2table()
         self.hide()
 
 
