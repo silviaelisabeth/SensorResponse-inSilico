@@ -96,7 +96,7 @@ def henderson_Sum4Base(pH, c_sum, pKa=9.25):
 
 def henderson_Sum4Acid(pH, c_sum, pKa=9.25):
     """
-    Returns the NH3 concentration depending on the pH and the TAN concentration
+    Returns the NH4+ concentration depending on the pH and the TAN concentration
     :param pH:
     :param c_sum:
     :param pKa:
