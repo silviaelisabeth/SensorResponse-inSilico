@@ -56,7 +56,7 @@ sbgd_nhx = 0.03            # background signal
 
 # others
 _integral_counter = 0       # helper scalar counting the integration
-ls_lines = list()           # list to collect integration boundaries in pyqtgraph 
+ls_lines = list()           # list to collect integration boundaries in pyqtgraph
 dres = dict()               # simulation results
 # get the local path for relative directories
 loc_path = os.getcwd() + r'/2019-2022/Project_Fabi/py2exe/'
@@ -502,7 +502,8 @@ class SimPage(QWizardPage):
         # -------------------------------------------------------------------------------------------
         # GroupBoxes to structure the layout
         navigation_group = QGroupBox("Navigation Tool Bar")
-        navigation_group.setStyleSheet("QGroupBox { font - weight: bold; border: 0px solid gray;}")
+        navigation_group.setStyleSheet(
+            "QGroupBox { font - weight: bold; border: 0px solid gray;}")
         grid_load = QGridLayout()
         navigation_group.setFixedHeight(70)
         vbox_bottom.addWidget(navigation_group)
@@ -519,7 +520,8 @@ class SimPage(QWizardPage):
 
         # create GroupBox to structure the layout
         general_group = QGroupBox("General Settings")
-        general_group.setStyleSheet("QGroupBox { font - weight: bold; border: 0px solid gray;}")
+        general_group.setStyleSheet(
+            "QGroupBox { font - weight: bold; border: 0px solid gray;}")
         general_group.setFixedHeight(75)
         grid_load = QGridLayout()
         grid_load.setSpacing(5)
@@ -538,7 +540,8 @@ class SimPage(QWizardPage):
         # -----------------------
         # pH Sensor Settings
         phsens_group = QGroupBox("pH Sensor Settings")
-        phsens_group.setStyleSheet("QGroupBox { font - weight: bold; border: 0px solid gray;}")
+        phsens_group.setStyleSheet(
+            "QGroupBox { font - weight: bold; border: 0px solid gray;}")
         phsens_group.setFixedHeight(110)
         grid_load = QGridLayout()
         grid_load.setSpacing(5)
@@ -560,7 +563,8 @@ class SimPage(QWizardPage):
         # -----------------------
         # Settings of the other sensor
         self.para23sens_group = QGroupBox()
-        self.para23sens_group.setStyleSheet("QGroupBox { font - weight: bold; border: 0px solid gray;}")
+        self.para23sens_group.setStyleSheet(
+            "QGroupBox { font - weight: bold; border: 0px solid gray;}")
         self.para23sens_group.setFixedHeight(150)
         grid_load = QGridLayout()
         grid_load.setSpacing(5)
@@ -585,8 +589,10 @@ class SimPage(QWizardPage):
         # --------------------------------------------------------------------------------------------------------------
         # pH Simulation
         self.fig_phsim = pg.PlotWidget()
-        self.fig_phsim.setLabel('left', '<font>pH value</font>', color=dcolor['font'])
-        self.fig_phsim.setLabel('bottom', '<font>Time</font>', units='<font>s</font>', color=dcolor['font'])
+        self.fig_phsim.setLabel(
+            'left', '<font>pH value</font>', color=dcolor['font'])
+        self.fig_phsim.setLabel(
+            'bottom', '<font>Time</font>', units='<font>s</font>', color=dcolor['font'])
 
         # create GroupBox to structure the layout
         phsim_group = QGroupBox("pH Sensor Simulation")
@@ -608,17 +614,19 @@ class SimPage(QWizardPage):
         self.fig_para2sim.scene().addItem(self.ax1_para2sim)
         self.ax_para2sim.getAxis('right').linkToView(self.ax1_para2sim)
         self.ax1_para2sim.setXLink(self.ax_para2sim)
-        
+
         # Axes layout
-        self.ax_para2sim.setLabel('bottom', '<font>Time</font>', units='<font>s</font>', color=dcolor['font'])
-        self.ax_para2sim.setLabel('left', '<font>Measured analyte</font>', units='<font>mg/L</font>', 
-                                    color=dcolor['font'])
+        self.ax_para2sim.setLabel(
+            'bottom', '<font>Time</font>', units='<font>s</font>', color=dcolor['font'])
+        self.ax_para2sim.setLabel('left', '<font>Measured analyte</font>', units='<font>mg/L</font>',
+                                  color=dcolor['font'])
         self.ax_para2sim.setLabel('right', '<font>Determined analyte</font>', units='<font>mg/L</font>',
-                                    color=dcolor['font'])
+                                  color=dcolor['font'])
 
         def updateViews():
             # view has resized; update auxiliary views to match
-           self.ax1_para2sim.setGeometry(self.ax_para2sim.vb.sceneBoundingRect())
+            self.ax1_para2sim.setGeometry(
+                self.ax_para2sim.vb.sceneBoundingRect())
         updateViews()
         self.ax_para2sim.vb.sigResized.connect(updateViews)
 
@@ -631,7 +639,7 @@ class SimPage(QWizardPage):
         # add GroupBox to layout and load buttons in GroupBox
         hbox_tleft.addWidget(self.para2sim_group)
         self.para2sim_group.setLayout(grid_para2sim)
-        grid_para2sim.addWidget(self.fig_para2sim) 
+        grid_para2sim.addWidget(self.fig_para2sim)
 
         # total parameter simulation
         self.fig_totalsim = pg.GraphicsLayoutWidget(show=True)
@@ -639,24 +647,6 @@ class SimPage(QWizardPage):
         self.ax_totalsim.setAutoVisible(y=True)
         label = pg.LabelItem(justify='right')
         self.fig_totalsim.addItem(label)
-        
-        #self.fig_totalsim = pg.PlotWidget()
-        #self.fig_totalsim.setLabel('bottom', '<font>Time</font>', units='<font>s</font>', color=dcolor['font'])
-
-        # self.fig_totalsim = plt.figure(facecolor=dcolor['background'])
-        # self.ax_totalsim = self.fig_totalsim.add_subplot()
-        # self.ax_totalsim.set_facecolor(dcolor['background'])
-        # self.canvas_totalsim = FigureCanvas(self.fig_totalsim)
-        # self.ntb = NavigationToolbar(self.canvas_totalsim, self, coordinates=False)
-        # self.ntb.setMinimumWidth(300)
-        # self.ntb.setStyleSheet("QToolBar { border: 0px, QToolButton{ background-color: white}}")
-
-        # self.ax_totalsim.set_xlabel('Time / s', color=dcolor['font'])
-        # self.ax_totalsim.tick_params(colors=dcolor['font'])
-        # [spine.set_edgecolor(dcolor['font']) for spine in self.ax_totalsim.spines.values()]
-
-        # self.fig_totalsim.tight_layout(pad=.75, rect=(0, 0.1, 1, .95))
-        # sns.despine()
 
         self.totalsim_group = QGroupBox()
         self.totalsim_group.setMinimumWidth(900)
@@ -667,8 +657,6 @@ class SimPage(QWizardPage):
         hbox_rbottom.addWidget(self.totalsim_group)
         self.totalsim_group.setLayout(grid_totalsim)
         grid_totalsim.addWidget(self.fig_totalsim)
-        # grid_totalsim.addWidget(self.canvas_totalsim)
-        # grid_totalsim.addWidget(self.ntb)
 
         # -------------------------------------------------------------------------------------------------------------
         self.setLayout(mlayout)
@@ -722,6 +710,7 @@ class SimPage(QWizardPage):
                 "plateau time").replace(',', '.'))
 
         self.para2_name = self.field("parameter2")
+        
         # identify the system according to given parameter
         # para2 will be the measured, para3 the calculated parameter
         global systems
@@ -769,19 +758,12 @@ class SimPage(QWizardPage):
         self.para2_t90_edit.setText(self.para2_respT)
         self.para2_pka_edit.setText(self.para2_pka)
 
-        # self.ax_phsim.cla(), self.ax_para2sim.cla(), self.ax_para3sim.cla(), self.ax_totalsim.cla()
-        # self.ax_para2sim.set_ylabel('{} / mg/L'.format(self.para2), color=dcolor['para2'])
-        # self.ax_para3sim.set_ylabel('{} / mg/L'.format(self.para3), color=dcolor['para3'])
-        # self.ax_totalsim.set_ylabel('{} / mg/L'.format(self.total_para), color=dcolor['font'])
-
         self.totalsim_group.setTitle(
             "{} Simulation".format(self.total_para_grp))
         self.para2sim_group.setTitle(
             "{}/{} Simulation".format(self.para2_grp, self.para3_grp))
         self.para23sens_group.setTitle(
             "{}/{} Sensor Settings".format(self.para2_grp, self.para3_grp))
-
-        # self.fig_phsim.canvas.draw(), self.fig_para2sim.canvas.draw(), self.fig_totalsim.canvas.draw()
 
         return
 
@@ -797,26 +779,25 @@ class SimPage(QWizardPage):
 
     def clear_phsim(self):
         self.fig_phsim.clear()
-        self.fig_phsim.setLabel('bottom', '<font>Time</font>', units='<font>s</font>', color=dcolor['font'])
+        self.fig_phsim.setLabel(
+            'bottom', '<font>Time</font>', units='<font>s</font>', color=dcolor['font'])
         self.fig_phsim.setLabel('left', 'pH value', color=dcolor['font'])
 
     def clear_para2timedrive(self):
         self.fig_para2sim.clear()
         self.ax_para2sim = self.fig_para2sim.plotItem
         self.ax1_para2sim.clear()
-
-        #self.ax1_para2sim = pg.ViewBox()
         self.fig_para2sim.scene().addItem(self.ax1_para2sim)
         self.ax_para2sim.getAxis('right').linkToView(self.ax1_para2sim)
         self.ax1_para2sim.setXLink(self.ax_para2sim)
 
         # Axes layout
-        self.ax_para2sim.setLabel('bottom', '<font>Time</font>', units='<font>s</font>', color=dcolor['font'])
-        self.ax_para2sim.setLabel('left', '<font>Measured analyte</font>', units='<font>mg/L</font>', 
-                                    color=dcolor['font'])
+        self.ax_para2sim.setLabel(
+            'bottom', '<font>Time</font>', units='<font>s</font>', color=dcolor['font'])
+        self.ax_para2sim.setLabel('left', '<font>Measured analyte</font>', units='<font>mg/L</font>',
+                                  color=dcolor['font'])
         self.ax_para2sim.setLabel('right', '<font>Determined analyte</font>', units='<font>mg/L</font>',
-                                    color=dcolor['font'])
-        #self.ax_para2sim.clear()
+                                  color=dcolor['font'])
 
     def clear_sumtimdrive(self):
         self.fig_totalsim.clear()
@@ -826,21 +807,14 @@ class SimPage(QWizardPage):
         self.fig_totalsim.addItem(label)
 
         # axis label
-        self.ax_totalsim.setLabel('bottom', '<font>Time</font>', units='<font>s</font>', color=dcolor['font'])
+        self.ax_totalsim.setLabel(
+            'bottom', '<font>Time</font>', units='<font>s</font>', color=dcolor['font'])
         if 'TAN' in self.total_para:
-            self.ax_totalsim.setLabel('left', '<math>TAN</math>', units='<font>mg/L</font>', color=dcolor['font'])
+            self.ax_totalsim.setLabel(
+                'left', '<math>TAN</math>', units='<font>mg/L</font>', color=dcolor['font'])
         else:
-            self.ax_totalsim.setLabel('left', '<font>Sum concentration</font>', units='<font>mg/L</font>', 
-                                        color=dcolor['font'])
-        
-        # self.ax_totalsim.cla()
-        # self.ax_totalsim.set_xlabel('Time / s', color=dcolor['font'])
-        # self.ax_totalsim.set_ylabel('{} / mg/L'.format(self.total_para), color=dcolor['font'])
-
-        # self.fig_totalsim.tight_layout(pad=.75, rect=(0.01, 0.01, 1, .95))
-        # self.ax_totalsim.tick_params(colors=dcolor['font'])
-        # sns.despine()
-        # self.fig_totalsim.canvas.draw()
+            self.ax_totalsim.setLabel('left', '<font>Sum concentration</font>', units='<font>mg/L</font>',
+                                      color=dcolor['font'])
 
     def align_concentrations(self, ls_ph, ls_cSum_gmL):
         if len(ls_cSum_gmL) == len(ls_ph):
@@ -896,7 +870,8 @@ class SimPage(QWizardPage):
             # check whether we have data to save
             try:
                 if self.df_res is None:
-                    msgBox = error_message(text="Simulate before saving. Simulation might have been unsuccessful.")
+                    msgBox = error_message(
+                        text="Simulate before saving. Simulation might have been unsuccessful.")
                     returnValue = msgBox.exec()
                     if returnValue == QMessageBox.Ok:
                         pass
@@ -907,13 +882,16 @@ class SimPage(QWizardPage):
                     # save figures in separate folder
                     for f in self.dic_figures.keys():
                         # create figure name and path
-                        figure_name = fname_save.split('.')[0] + '_Graph-' + '-'.join(f.split(' ')) + '.'
+                        figure_name = fname_save.split(
+                            '.')[0] + '_Graph-' + '-'.join(f.split(' ')) + '.'
 
                         for t in save_type:
                             # create an exporter instance, as an argument give it the item you wish to export
-                            exporter = pg.exporters.ImageExporter(self.dic_figures[f].getPlotItem())#self.dic_figures[0].scene())
+                            exporter = pg.exporters.ImageExporter(
+                                self.dic_figures[f].getPlotItem())
                             # set export parameters if needed
-                            exporter.parameters()['width'] = 1000   # (note this also affects height parameter)
+                            # (note this also affects height parameter)
+                            exporter.parameters()['width'] = 1000
 
                             # save to file
                             if t == 'jpg':
@@ -921,10 +899,10 @@ class SimPage(QWizardPage):
                                 myQImage.save(figure_name + t, "JPG", 100)
                             else:
                                 exporter.export(figure_name + t)
-                            # self.dic_figures[f].savefig(figure_name + t, dpi=300, transparent=True)
 
             except NameError:
-                msgBox = error_message(text="Simulate before saving", type='Error')
+                msgBox = error_message(
+                    text="Simulate before saving", type='Error')
                 returnValue = msgBox.exec()
                 if returnValue == QMessageBox.Ok:
                     pass
@@ -942,7 +920,8 @@ class SimPage(QWizardPage):
             # check whether we have data to save
             try:
                 if self.df_res is None:
-                    msgBox = error_message(text="Simulate before saving", type='Error')
+                    msgBox = error_message(
+                        text="Simulate before saving", type='Error')
                     returnValue = msgBox.exec()
                     if returnValue == QMessageBox.Ok:
                         pass
@@ -951,7 +930,8 @@ class SimPage(QWizardPage):
                     self.save2txt(fname_save)
 
             except NameError:
-                msgBox = error_message(text="Simulate before saving", type='Error')
+                msgBox = error_message(
+                    text="Simulate before saving", type='Error')
                 returnValue = msgBox.exec()
                 if returnValue == QMessageBox.Ok:
                     pass
@@ -1059,17 +1039,20 @@ class SimPage(QWizardPage):
             pass
 
     def run_simulation(self):
-        print('---------------------------------------------------------------------------------------------')
-        # clear figures and xcorrds
-        # self.clear_phsim(), self.clear_para2timedrive(), self.clear_sumtimdrive()
+        # clear potential left-over plots
+        self.clear_phsim()
+        self.clear_para2timedrive()
+        self.clear_sumtimdrive()
+
         global ls_lines, _integral_counter
         ls_lines, self.ls_xcoords, self.vlines_list = [], [], []
-        _integral_counter =  0
+        _integral_counter = 0
 
         # target concentrations
-        df_res = pd.concat([self.sensor_ph['pH target'], self.sensor_para2['Base target'], 
+        df_res = pd.concat([self.sensor_ph['pH target'], self.sensor_para2['Base target'],
                             self.sensor_para2['Acid target'], self.sensor_para2['Sum target']], axis=1)
-        df_res.columns = ['target pH', 'target_mg/L Base', 'target_mg/L Acid', 'target_mg/L Sum']
+        df_res.columns = ['target pH', 'target_mg/L Base',
+                          'target_mg/L Acid', 'target_mg/L Sum']
 
         # individual sensor - reduce by individual plotting (different function)
         [df_res, cplateaupH, cplateauTotal,
@@ -1078,7 +1061,8 @@ class SimPage(QWizardPage):
         df_res = df_res.dropna()
 
         # pH sensor response
-        [df_pHrec, df_pHcalc] = bs.pH_sensor(cplateau=cplateaupH, sensor_ph=self.sensor_ph, para_meas=self.para_meas)
+        [df_pHrec, df_pHcalc] = bs.pH_sensor(
+            cplateau=cplateaupH, sensor_ph=self.sensor_ph, para_meas=self.para_meas)
         df_pHrec.index = [round(i, 2) for i in df_pHrec.index]
 
         # include sensor response and drift to result dataframe
@@ -1092,30 +1076,30 @@ class SimPage(QWizardPage):
 
         # ---------------------------------------------------------------------------------------------------------
         # plotting part | individual sensor - target vs record
-        _ = plot_phsensor(df_res=self.df_res, color=dcolor['font'], fig=self.fig_phsim)
-        _ = plot_parasensor(df_res=self.df_res,  analyte=self.sensor_para2['analyte'], para2=self.para2, 
+        _ = plot_phsensor(df_res=self.df_res,
+                          color=dcolor['font'], fig=self.fig_phsim)
+        _ = plot_parasensor(df_res=self.df_res,  analyte=self.sensor_para2['analyte'], para2=self.para2,
                             para3=self.para3, color=dcolor['font'], para_sum=self.total_para, fig=self.fig_para2sim,
                             ax=self.ax_para2sim, ax1=self.ax1_para2sim)
 
         # final total parameter model
-        _ = plot_totalModel(df_res=self.df_res, color=dcolor['font'], para_sum=self.total_para, 
+        _ = plot_totalModel(df_res=self.df_res, color=dcolor['font'], para_sum=self.total_para,
                             fig1=self.ax_totalsim)
         self.fig_totalsim.scene().sigMouseClicked.connect(self.mouseMoved)
 
         # --------------------------------------------------------------
         # re-draw figures for saving with transparent/white background
         fig_pH = plot_phsensor4save(df_res=self.df_res)
-        fig_base = plot_paras4save(df_res=self.df_res, analyte=self.sensor_para2['analyte'], para2=self.para2, 
-                                    para3=self.para3,para_sum=self.total_para)
-        fig_total = plot_total4save(df_res=self.df_res, para_sum=self.total_para)
-
-        # allow click events for total parameter for integration (simpson for discrete measurement data)
-        #self.fig_totalsim.canvas.mpl_connect('button_press_event', self.onclick_integral)
+        fig_base = plot_paras4save(df_res=self.df_res, analyte=self.sensor_para2['analyte'], para2=self.para2,
+                                   para3=self.para3, para_sum=self.total_para)
+        fig_total = plot_total4save(
+            df_res=self.df_res, para_sum=self.total_para)
 
         # --------------------------------------------------------------------------------------------------------------
         # collect for result output (save data)
-        self.dic_figures = dict({'pH': fig_pH, 'Total': fig_total, 'Base': fig_base}) 
-    
+        self.dic_figures = dict(
+            {'pH': fig_pH, 'Total': fig_total, 'Base': fig_base})
+
     def mouseMoved(self, event):
         global ls_lines
 
@@ -1134,9 +1118,9 @@ class SimPage(QWizardPage):
         mousePoint = vb.mapSceneToView(event._scenePos)
         self.ls_xcoords.append(mousePoint.x())
 
-        # add vertical lines in plot 
+        # add vertical lines in plot
         self.v_line = pg.InfiniteLine(angle=90, movable=True)
-        self.v_line.setPos(mousePoint.x()) 
+        self.v_line.setPos(mousePoint.x())
         self.ax_totalsim.addItem(self.v_line)
 
         # make vertical line drag-able and update x-value in list
@@ -1147,43 +1131,12 @@ class SimPage(QWizardPage):
         if len(self.ls_xcoords) == 2:
             self.int_button.setEnabled(True)
 
-    def onclick_integral_v1(self, event):
-        modifiers = QApplication.keyboardModifiers()
-        if modifiers != Qt.ControlModifier:  # change selected range
-            return
-        if len(self.ls_xcoords) >= 2:
-            self.ls_xcoords, ls_xcoords = list(), list()
-            self.int_button.setEnabled(False)
-        else:
-            self.int_button.setEnabled(True)
-
-        if event.xdata is None:
-            if len(self.ls_xcoords) <= 2:
-                event.xdata = self.df_res.index.max()
-            else:
-                event.xdata = 0
-
-        self.ls_xcoords.append(event.xdata)
-        self.vlines_list.append(self.ax_totalsim.vlines(x=self.ls_xcoords, ymin=self.df_res['Sum calc'].min(),
-                                                        ymax=self.df_res['Sum calc'].max(), color='k', lw=0.15))
-
-        if len(self.ls_xcoords) == 2:
-            self.aspan_list = []
-            self.aspan_list.append(self.ax_totalsim.axvspan(self.ls_xcoords[0], self.ls_xcoords[1], color='grey',
-                                                            alpha=0.3))
-
-        # update figure plot
-        self.fig_totalsim.canvas.draw()
-
-        # allow integral calculation as soon as xcoords have been collected
-        if len(self.ls_xcoords) == 2:
-            self.int_button.setEnabled(True)
-
     def movedBoundary(self, line):
         pos = line.pos()[0]
-        line_pos = min(range(len(self.ls_xcoords)), key=lambda i: abs(self.ls_xcoords[i]-pos))
+        line_pos = min(range(len(self.ls_xcoords)),
+                       key=lambda i: abs(self.ls_xcoords[i]-pos))
         self.ls_xcoords[line_pos] = pos
-        
+
         # allow integral calculation as soon as xcoords have been collected
         if len(self.ls_xcoords) == 2:
             self.int_button.setEnabled(True)
@@ -1201,11 +1154,15 @@ class SimPage(QWizardPage):
         if len(self.ls_xcoords) == 2:
             self.df4int = self.df_res[['Sum calc', 'target_mg/L Sum']].loc[min(self.ls_xcoords):max(self.ls_xcoords)]
             dfint_calc = integrate.simps(self.df4int['Sum calc'].to_numpy(), x=self.df4int.index)
-            dfint_target = integrate.simps(self.df4int['target_mg/L Sum'].to_numpy(), x=self.df4int.index)
+            # target function assumed to have an infinite fast response (~step function)
+            #dfint_target = integrate.simps(self.df4int['target_mg/L Sum'].to_numpy(), x=self.df4int.index)
+            grp = self.df4int.groupby('target_mg/L Sum')
+            dfint_target = np.sum([(k * (grp.groups[k][-1] - grp.groups[k][0])) for k in grp.groups.keys()])
 
             # Integration range (s), target pH, target Sum, integral target Sum, integral Sum, error
             result = list([(round(min(self.ls_xcoords), 2), round(max(self.ls_xcoords)), 2),
-                           self.df_res['target pH'].loc[min(self.ls_xcoords):max(self.ls_xcoords)].mean(),
+                           self.df_res['target pH'].loc[min(
+                               self.ls_xcoords):max(self.ls_xcoords)].mean(),
                            self.df_res['target_mg/L Sum'].mean(), dfint_calc, dfint_target,
                            dfint_calc - dfint_target])
 
@@ -1221,12 +1178,9 @@ class SimPage(QWizardPage):
             # clear integral area in total parameter plot
             for line in ls_lines:
                 self.ax_totalsim.removeItem(line)
-
-            #[aspan.remove() for aspan in self.aspan_list]
             [vlines.remove() for vlines in self.vlines_list]
 
             # update figure plot
-            #self.fig_totalsim.canvas.draw()
             self.vlines_list, ls_lines = list(), list()
 
             # disable Integral button til 2 xcoords are selected
@@ -1405,26 +1359,34 @@ def plot_phsensor(df_res, color, fig=None):
 def plot_phsensor4save(df_res):
     fig = pg.PlotWidget()
     fig.setBackground('w')
-    
-    styles = {'color':'k', 'font-size':'15px'}
+
+    styles = {'color': 'k', 'font-size': '15px'}
     fig.setLabel('left', '<font>pH value</font>', **styles)
-    fig.setLabel('bottom', '<font>Time</font>', units='<font>s</font>', **styles)
-    
-     # plotting with pyqtgraph
+    fig.setLabel('bottom', '<font>Time</font>',
+                 units='<font>s</font>', **styles)
+
+    # plotting with pyqtgraph
     penT = pg.mkPen(color=dcolor['background'], width=1, style=Qt.DashLine)
     penS = pg.mkPen(color=dcolor['pH'], width=2)
-    fig.plot(df_res['target pH'].dropna().index, df_res['target pH'].dropna().to_numpy(), pen=penT)
-    fig.plot(df_res['pH calc'].dropna().index, df_res['pH calc'].dropna().to_numpy(), pen=penS)
+    fig.plot(df_res['target pH'].dropna().index,
+             df_res['target pH'].dropna().to_numpy(), pen=penT)
+    fig.plot(df_res['pH calc'].dropna().index,
+             df_res['pH calc'].dropna().to_numpy(), pen=penS)
 
     fig.setXRange(int(-0.5), int(df_res['pH calc'].dropna().index[-1]*1.05))
-    fig.setYRange(int(df_res['pH calc'].min()), int(df_res['pH calc'].max()*1.05))
+    fig.setYRange(int(df_res['pH calc'].min()),
+                  int(df_res['pH calc'].max()*1.05))
 
     # adjust color
-    fig.getAxis('bottom').setPen(pg.mkPen(color=dcolor['background'], width=1.75))
-    fig.getAxis('bottom').setTextPen(pg.mkPen(color=dcolor['background'], width=1.75))
-    fig.getAxis('left').setPen(pg.mkPen(color=dcolor['background'], width=1.75))
-    fig.getAxis('left').setTextPen(pg.mkPen(color=dcolor['background'], width=1.75))
-     
+    fig.getAxis('bottom').setPen(
+        pg.mkPen(color=dcolor['background'], width=1.75))
+    fig.getAxis('bottom').setTextPen(
+        pg.mkPen(color=dcolor['background'], width=1.75))
+    fig.getAxis('left').setPen(
+        pg.mkPen(color=dcolor['background'], width=1.75))
+    fig.getAxis('left').setTextPen(
+        pg.mkPen(color=dcolor['background'], width=1.75))
+
     return fig
 
 
@@ -1436,22 +1398,30 @@ def plot_parasensor(df_res, para2, para3, analyte, color, para_sum, fig=None, ax
         df_para3 = df_res['Acid calc'].dropna()
 
         if 'TAN' in para_sum:
-            fig.setLabel('left', '<font>NH<sub>3</sub></font>', units='mg/L', color=dcolor['para2'])
-            fig.setLabel('right', '<font>NH<sub>4</sub><sup>+</sup></font>', units='mg/L', color=dcolor['para3'])
+            fig.setLabel('left', '<font>NH<sub>3</sub></font>',
+                         units='mg/L', color=dcolor['para2'])
+            fig.setLabel('right', '<font>NH<sub>4</sub><sup>+</sup></font>',
+                         units='mg/L', color=dcolor['para3'])
         else:
-            fig.setLabel('left', '<font>HS<sup>-</sup></font>', units='mg/L', color=dcolor['para2'])
-            fig.setLabel('right', '<font>H<sub>2</sub>S</font>', units='mg/L', color=dcolor['para3'])
+            fig.setLabel('left', '<font>HS<sup>-</sup></font>',
+                         units='mg/L', color=dcolor['para2'])
+            fig.setLabel('right', '<font>H<sub>2</sub>S</font>',
+                         units='mg/L', color=dcolor['para3'])
     else:
         df_target3 = df_res['target_mg/L Base'].dropna()
         df_target2 = df_res['Base calc'].dropna()
         df_para3 = df_res['target_mg/L Acid'].dropna()
         df_para2 = df_res['Acid calc'].dropna()
         if 'TAN' in para_sum:
-            fig.setLabel('right', '<font>NH<sub>3</sub></font>', units='mg/L', color=dcolor['para2'])
-            fig.setLabel('left', '<font>NH<sub>4</sub><sup>+</sup></font>', units='mg/L', color=dcolor['para3'])
+            fig.setLabel('right', '<font>NH<sub>3</sub></font>',
+                         units='mg/L', color=dcolor['para2'])
+            fig.setLabel('left', '<font>NH<sub>4</sub><sup>+</sup></font>',
+                         units='mg/L', color=dcolor['para3'])
         else:
-            fig.setLabel('left', '<font>HS<sup>-</sup></font>', units='mg/L', color=dcolor['para2'])
-            fig.setLabel('right', '<font>H<sub>2</sub>S</font>', units='mg/L', color=dcolor['para3'])
+            fig.setLabel('left', '<font>HS<sup>-</sup></font>',
+                         units='mg/L', color=dcolor['para2'])
+            fig.setLabel('right', '<font>H<sub>2</sub>S</font>',
+                         units='mg/L', color=dcolor['para3'])
 
     # plotting with pyqtgraph
     penT = pg.mkPen(color=color, width=1, style=Qt.DashLine)
@@ -1460,12 +1430,15 @@ def plot_parasensor(df_res, para2, para3, analyte, color, para_sum, fig=None, ax
     penS1 = pg.mkPen(color=dcolor['para3'], width=2)
 
     # measured analyte
-    ax.plot(df_target2.index.to_numpy(), df_target2.to_numpy(), pen=penT, label=para2 + ' target')
-    ax.plot(df_para2.index.to_numpy(), df_para2.to_numpy(), pen=penS, label=para2)
+    ax.plot(df_target2.index.to_numpy(), df_target2.to_numpy(),
+            pen=penT, label=para2 + ' target')
+    ax.plot(df_para2.index.to_numpy(),
+            df_para2.to_numpy(), pen=penS, label=para2)
     # other analyte
-    ax1.addItem(pg.PlotCurveItem(x=df_target3.index.to_numpy(), y=df_target3.to_numpy(), pen=penT1, 
+    ax1.addItem(pg.PlotCurveItem(x=df_target3.index.to_numpy(), y=df_target3.to_numpy(), pen=penT1,
                                  label=para3 + ' target'))
-    ax1.addItem(pg.PlotCurveItem(x=df_para3.index.to_numpy(), y=df_para3.to_numpy(), pen=penS1, label=para3))
+    ax1.addItem(pg.PlotCurveItem(x=df_para3.index.to_numpy(),
+                y=df_para3.to_numpy(), pen=penS1, label=para3))
     return fig
 
 
@@ -1479,7 +1452,7 @@ def plot_paras4save(df_res, para2, para3, analyte, para_sum):
     ax.getAxis('right').linkToView(ax1)
     ax1.setXLink(ax)
 
-    styles = {'color':'k', 'font-size':'15px'}
+    styles = {'color': 'k', 'font-size': '15px'}
     fig.setLabel('bottom', '<font>Time</font>', units='<font>s</font>', **styles)
     if analyte == 'base' or analyte == 'Base':
         df_target2 = df_res['target_mg/L Base'].dropna()
@@ -1489,7 +1462,8 @@ def plot_paras4save(df_res, para2, para3, analyte, para_sum):
 
         if 'TAN' in para_sum:
             fig.setLabel('left', '<font>NH<sub>3</sub></font>', units='mg/L', **styles)
-            fig.setLabel('right', '<font>NH<sub>4</sub><sup>+</sup></font>', units='mg/L', **styles)
+            fig.setLabel(
+                'right', '<font>NH<sub>4</sub><sup>+</sup></font>', units='mg/L', **styles)
         else:
             fig.setLabel('left', '<font>HS<sup>-</sup></font>', units='mg/L', **styles)
             fig.setLabel('right', '<font>H<sub>2</sub>S</font>', units='mg/L', **styles)
@@ -1524,7 +1498,7 @@ def plot_paras4save(df_res, para2, para3, analyte, para_sum):
         ax1.setGeometry(ax.vb.sceneBoundingRect())
     updateViews()
     ax.vb.sigResized.connect(updateViews)
-    
+
     # adjust color
     fig.getAxis('bottom').setPen(pg.mkPen(color=dcolor['background'], width=1.75))
     fig.getAxis('bottom').setTextPen(pg.mkPen(color=dcolor['background'], width=1.75))
@@ -1551,36 +1525,14 @@ def plot_totalModel(df_res, para_sum, color, fig1=None):
     fig1.setXRange(int(-0.5), int(df_sim.index[-1]*1.05))
     fig1.setYRange(int(df_target.min()*0.15), int(df_target.max()*1.85))
 
-    # ------------------------
-    # plt.ioff()
-    # preparation of figure plot
-    # if ax1 is None:
-    #    fig1, ax1 = plt.subplots()
-    #    ax1.set_aspect('auto')
-    # else:
-    #    ax1.cla()
-
-    # ax1.set_xlabel('Time / s', color=color), ax1.set_ylabel('{} / mg/L'.format(para_sum))
-    # ax1.tick_params(colors=color)
-
-    # ax1.plot(df_res['target_mg/L Sum'].dropna(), lw=1, ls=ls['target'], color=color, label=para_sum + ' target')
-    # ax1.plot(df_res['Sum calc'].dropna(), lw=1., color=dcolor['total para'], label=para_sum)
-
-    # ax1.set_xlim(-0.5, df_res['Sum calc'].dropna().index[-1] * 1.05)
-    # sns.despine(), fig1.tight_layout(pad=.75, rect=(0.01, 0.005, 1, .95))
-
-    # if show is True:
-    #    fig1.canvas.draw()
-    # else:
-    #    plt.close(fig1)
     return fig1
 
 
 def plot_total4save(df_res, para_sum):
     fig = pg.PlotWidget()
     fig.setBackground('w')
-    
-    styles = {'color':'k', 'font-size':'15px'}
+
+    styles = {'color': 'k', 'font-size': '15px'}
     fig.setLabel('bottom', '<font>Time</font>', units='<font>s</font>', **styles)
     if 'TAN' in para_sum:
         fig.setLabel('left', '<math>TAN</math>', units='<font>mg/L</font>', **styles)
@@ -1605,6 +1557,7 @@ def plot_total4save(df_res, para_sum):
     fig.getAxis('left').setPen(pg.mkPen(color=dcolor['background'], width=1.75))
     fig.getAxis('left').setTextPen(pg.mkPen(color=dcolor['background'], width=1.75))
     return fig
+
 
 # .....................................................................................................................
 def error_message(text, type='Warning'):
@@ -1635,8 +1588,7 @@ if __name__ == '__main__':
     rect = screen.availableGeometry()
     Wizard.setMaximumHeight(int(rect.height() * 0.9))
     # position (screen width, screen height), width, height
-    Wizard.setGeometry(int(rect.width() * 0.075),
-                       int(rect.height() * 0.1), 710, 550)
+    Wizard.setGeometry(int(rect.width() * 0.075), int(rect.height() * 0.1), 710, 550)
 
     # show wizard
     Wizard.show()
