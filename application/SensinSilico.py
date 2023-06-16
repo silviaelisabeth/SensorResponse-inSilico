@@ -2,8 +2,6 @@ __author__ = 'szieger'
 __project__ = 'in silico study for sensor response'
 
 import basics_sensorSignal_v4 as bs
-import matplotlib
-import matplotlib.pyplot as plt
 import seaborn as sns
 import re
 from PyQt5 import QtGui, QtCore, QtWidgets
@@ -12,8 +10,6 @@ from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (QApplication, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QMessageBox, QGridLayout,
                              QLabel, QLineEdit, QGroupBox, QFileDialog, QFrame, QDialog, QTableWidget, QTableWidgetItem,
                              QWizard, QWizardPage)
-from matplotlib.backends.backend_qt5agg import (FigureCanvasQTAgg as FigureCanvas,
-                                                NavigationToolbar2QT as NavigationToolbar)
 from pyqtgraph import PlotWidget, plot
 import pyqtgraph as pg
 import pyqtgraph.exporters
@@ -21,7 +17,6 @@ from scipy import integrate
 import pandas as pd
 import numpy as np
 import os
-import pathlib
 
 # .....................................................................................................................
 # global parameter
@@ -39,20 +34,14 @@ systems = dict({'TDS': dict({'base': ['HS-', 'HS', 'hs-', 'hs'], 'acid': ['H2S',
                 'TAN': dict({'base': ['NH3', 'nh3'], 'acid': ['NH4+', 'NH4', 'nh4+', 'nh4']})})
 
 # fixed parameter depending on literature research
-ph_deci = 2                # decimals for sensor sensitivity
-ph_res = 1e-5              # resolution of the pH sensor
-
-E0 = 0.43                  # zero potential of the reference electrode
-tsteps = 1e-3              # time steps for pH and base sensor (theory)
+ph_res = 1e-3              # resolution of the pH sensor
+ph_E0 = 0.22               # standard potential of the reference electrode of the pH meter; V
+tsteps = 1e-3              # time steps for pH and measuring sensor (theory); seconds
 
 # electrochemical sensor · 2
-# concentration point for sum parameter at which the potential was measured
-sum_calib = 1
-# maximal signal at maximal analyte concentration in mV (pH=1)
-sigBase_max = 0.09
-sigBase_bgd = 0.02         # background signal / offset in mV at 0M base
-base_res = 1e-9            # resolution of the base sensor
-sbgd_nhx = 0.03            # background signal
+conc_calib = 1             # reaction quotient for calibrating the measuring sensor
+sens_E = 0.09              # potential of the measuring sensor at certain concentration (conc_calib); V
+sens_res = 1e-9            # resolution of the measuring sensor
 
 # others
 _integral_counter = 0       # helper scalar counting the integration
@@ -941,7 +930,7 @@ class SimPage(QWizardPage):
         # if integral available, convert to DataFrame
         if len(dres.keys()) != 0:
             int_out = pd.DataFrame.from_dict(dres)
-            int_out.index = ['integration range (s)', 'target pH', 'target Sum', 'integral target Sum',
+            int_out.index = ['integration range (s)', 'target pH', 'target Sum', 'integral target Sum', 
                              'integral observed Sum', 'error']
         else:
             int_out = None
@@ -999,22 +988,18 @@ class SimPage(QWizardPage):
             df_target_sens2 = pd.DataFrame(df_target['signal Acid'])
         else:
             df_target_sens2 = pd.DataFrame(df_target['signal Base'])
-        ls_target_sens2 = list(
-            df_target_sens2[df_target_sens2.columns[0]].drop_duplicates().values)
+        ls_target_sens2 = list(df_target_sens2[df_target_sens2.columns[0]].drop_duplicates().values)
 
         # collect all relevant parameter
-        self.sensor_ph = dict({'E0': E0, 't90': float(self.ph_t90_edit.text()), 'resolution': ph_res,
-                               'start pH': ls_ph[0], 'time steps': tsteps, 'sensitivity': ph_deci,
-                               'pH target': df_target['signal pH'], 'set values': ls_ph})
+        self.sensor_ph = dict({'E0': ph_E0, 't90': float(self.ph_t90_edit.text()), 'resolution': ph_res,
+                               'start pH': ls_ph[0], 'time steps': tsteps, 'pH target': df_target['signal pH'], 'set values': ls_ph})
 
-        self.sensor_para2 = dict({'sensitivity': ph_deci, 'analyte': self.analyte, 'background signal': sbgd_nhx,
-                                  'pKa': float(self.para2_pka_edit.text()),  'signal min': sigBase_bgd,
-                                  'signal max': sigBase_max, 'resolution': base_res, 'time steps': tsteps,
+        self.sensor_para2 = dict({'analyte': self.analyte, 'time steps': tsteps,
+                                  'pKa': float(self.para2_pka_edit.text()), 'E': sens_E, 'resolution': sens_res,
                                   't90': float(self.para2_t90_edit.text()), 'Base target': df_target['signal Base'],
                                   'Acid target': df_target['signal Acid'], 'Sum target': df_target['signal Sum'],
-                                  'calib Total': sum_calib, 'set values': ls_cSum_gmL, 'set sensor2': ls_target_sens2})
-        self.para_meas = dict(
-            {'plateau time': float(self.tsteady_edit.text())})
+                                  'conc_calib': conc_calib, 'set values': ls_cSum_gmL, 'set sensor2': ls_target_sens2})
+        self.para_meas = dict({'plateau time': float(self.tsteady_edit.text())})
 
         # -----------------------------------------------------------------------------------------------------------
         # check pH sensor
@@ -1066,8 +1051,8 @@ class SimPage(QWizardPage):
         df_pHrec.index = [round(i, 2) for i in df_pHrec.index]
 
         # include sensor response and drift to result dataframe
-        df_res = pd.concat([df_res, df_pHrec.loc[df_res.index],
-                           df_pHcalc.loc[df_res.index]], axis=1).sort_index(axis=1)
+        df_res = pd.concat([df_res, df_pHrec.loc[df_res.index], df_pHcalc.loc[df_res.index]], 
+                           axis=1).sort_index(axis=1)
 
         # para2 sensor - calculate individual sensor response as well as total parameter
         df_res = bs.para2Sensorcalc(df_res=df_res, analyte=self.sensor_para2['analyte'], cplateauSum=cplateauTotal,
@@ -1092,13 +1077,11 @@ class SimPage(QWizardPage):
         fig_pH = plot_phsensor4save(df_res=self.df_res)
         fig_base = plot_paras4save(df_res=self.df_res, analyte=self.sensor_para2['analyte'], para2=self.para2,
                                    para3=self.para3, para_sum=self.total_para)
-        fig_total = plot_total4save(
-            df_res=self.df_res, para_sum=self.total_para)
+        fig_total = plot_total4save(df_res=self.df_res, para_sum=self.total_para)
 
         # --------------------------------------------------------------------------------------------------------------
         # collect for result output (save data)
-        self.dic_figures = dict(
-            {'pH': fig_pH, 'Total': fig_total, 'Base': fig_base})
+        self.dic_figures = dict({'pH': fig_pH, 'Total': fig_total, 'Base': fig_base})
 
     def mouseMoved(self, event):
         global ls_lines
@@ -1126,7 +1109,7 @@ class SimPage(QWizardPage):
         # make vertical line drag-able and update x-value in list
         self.v_line.sigPositionChanged.connect(self.movedBoundary)
         ls_lines.append(self.v_line)
-        print(1145, ls_lines)
+
         # allow integral calculation as soon as xcoords have been collected
         if len(self.ls_xcoords) == 2:
             self.int_button.setEnabled(True)

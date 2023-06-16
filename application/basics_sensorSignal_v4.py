@@ -42,6 +42,7 @@ def _gompertz_curve_v1(x, t90, tau, pstart, s_diff, slope='increase'):
     """
     b = np.log(-np.log(tau))
     k = 1 / t90 * (b - np.log(np.log(1 / 0.9)))
+
     if slope == 'increase':
         y = s_diff * np.exp(-1 * np.exp(b - k*x)) + pstart
     elif slope == 'decline':
@@ -66,9 +67,9 @@ def Nernst_equation_invert(E, E0, T=25):
     return (E0 - E / 1000) * n * F / (2.303 * R * (T + 273.15))
 
 
-def _calibration_electroSens(Emax, cmax):
+def _calibration_electroSens(E, conc):
     # Nernst equation with slope -59mV: E = E0 - 59mV/z * log10(c)
-    E0 = Emax + (59/n * np.log(cmax))
+    E0 = E + (59/n * np.log(conc))
     para = dict({'slope': 59, 'E0': E0})
     return para
 
@@ -182,13 +183,14 @@ def _sensor_response(cplateau, psensor, tplateau, cstart):
 
     # simulate for each signal level a respective sensor response
     c_apparent = cstart
-    dsig = dict()
+    dsig, df_sensor = dict(), None
     for en, ctarget in enumerate(cplateau):
         sdiff = ctarget - c_apparent
         if en == 0:
             xnew = sens_time
         else:
             xnew = np.linspace((tplateau + steps) * en, (tplateau + steps) * en + tplateau, num=num)
+
         df_sig = pd.DataFrame(_gompertz_curve_v1(x=sens_time, t90=psensor['t90'], s_diff=sdiff, pstart=c_apparent,
                                                  tau=psensor['resolution'], slope='increase'), index=xnew,
                               columns=['potential mV'])
@@ -197,6 +199,7 @@ def _sensor_response(cplateau, psensor, tplateau, cstart):
         dsig[en] = df_sig
         df_sensor = pd.concat(dsig)
         df_sensor.index = [i[1] for i in df_sensor.index]
+
     return df_sensor
 
 
@@ -223,7 +226,7 @@ def calibSensor_pH(target_ph, sensor_ph):
 
 def calibSensor_para(target_para, sensor2):
     # sensor 2 - targeted concentration fluctuation in mV
-    para = _calibration_electroSens(Emax=sensor2['signal max'], cmax=sensor2['calib Total'])
+    para = _calibration_electroSens(E=sensor2['E'], conc=sensor2['conc_calib'])
 
     df_sigSens2_mV = pd.DataFrame(target_para['target_mg/L Sum'] * para['slope'] + para['E0'])
     df_sigSens2_mV.columns = ['potential mV Sum']
@@ -283,7 +286,6 @@ def para2Sensorcalc(df_res, analyte, cplateauSum, df_pHcalc, sensor2, para_meas)
         df_acid_calc = pd.DataFrame(henderson_acid(pH=df_pHcalc['pH calc'].to_numpy(), pKa=sensor2['pKa'],
                                                    c_base=df_base_calc['Base calc'].to_numpy()), columns=['Acid calc'],
                                     index=[round(i, 2) for i in df_pHcalc.index])
-
     elif analyte == 'acid' or analyte == 'Acid':
         cAcid = [df_res[df_res['Potential mV Sum'] == c]['target_mg/L Acid'].to_numpy() for c in cplateauSum]
 
