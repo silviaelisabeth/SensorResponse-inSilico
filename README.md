@@ -1,5 +1,5 @@
 # SensorResponse-inSilico
-This is an in-silico study to simulate bias due to delayed sensor response and the error propagation when working with two (electrochemical) sensors.
+SensinSilico is a simulation software published together with the respective peer-reviewed article *xXXx in xXXx (TBA)*. It studies the error propaga(on when combining two (electrochemical) sensors with different response times. This document is meant as installation and operation manual to use the software and explains relevant application’s functions.
 
 ### Background
 In environmental sensing, especially in total parameter monitoring, it is required to monitor not one but at least two analytes simultaneously and ideally at the same location. However, due to differences in sensor characteristics, e.g., acquisition rate, sensor response, etc., it can be cumbersome to do this for multiple sensors.
@@ -14,12 +14,13 @@ For the software application to run properly, leave all the files in the folder 
 
 ### Requirements
 When using the source code, python3 and the following Python packages are required for execution: 
-Matplotlib (version 3.7.1), numpy (version 1.24.2), pandas (version 1.5.3), PyQt5 (version 5.15.9), scipy (version 1.10.1), and seaborn (version 0.12.2).
+numpy (version 1.24.2), pandas (version 1.5.3), PyQt5 (version 5.15.9), pyqtgraph (version 0.13.3), scipy (version 1.10.1), and seaborn (version 0.12.2).
 
-The package versions listed are the versions used when the software is released. Older versions might cause errors and bugs. If you have difficulties running the software, please do not hesitate to contact me via email under info@silviazieger.com.
+The package versions listed are the versions used when the so+ware is released. Older versions might cause er- rors and bugs, whereas newer versions should not make much of a difference. If you have difficulties running the software, please do not hesitate to reach out via email under info@silviazieger.com.
+
 
 ### Manual and Instructions on how to use the software
 Next to the readme file, a manual *Instruction.pdf* is uploaded. Here you will find a step by step guide on how to use the simulation software including a summary of the context and theory.
 
 ### Disclaimer
-The application was tested on windows and mac (M1 Ventura 13.3).
+ The software has been tested for both MacOS (MacBook Pro – Apple M1, Version 13.4) and Windows (Version 10.0.19045).
