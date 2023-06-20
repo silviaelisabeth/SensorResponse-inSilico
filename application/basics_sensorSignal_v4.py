@@ -348,12 +348,12 @@ def save_integral(para_meas, sensor_ph, sensor_para2, dres, total_lbl):
     if int_out.empty:
         out = df1
     else:
-        int_out.index = ['integration range (s)', 'target pH', 'target Sum (mg/L)', 'integral target Sum',
-                         'integral observed Sum', 'error']
+        int_out.index = ['integration range (s)', 'target pH', 't90 pH', 'target Sum (mg/L)', 't90 meas sens', 
+                         'integral target Sum', 'integral observed Sum', 'error']
         int_out.loc['peaks', :] = list([i-1 for i in dres.keys()])
         int_out.columns = np.arange(len(int_out.columns))
-        int_out = int_out.loc[['peaks', 'integration range (s)', 'target pH', 'target Sum (mg/L)', 'integral target Sum',
-                               'integral observed Sum', 'error']]
+        int_out = int_out.loc[['peaks', 'integration range (s)', 't90 pH', 'target Sum (mg/L)', 't90 meas sens', 
+                         'integral target Sum', 'integral observed Sum', 'error']]
 
         # ------------------------------------------------------------
         out = pd.concat([df1, int_out])

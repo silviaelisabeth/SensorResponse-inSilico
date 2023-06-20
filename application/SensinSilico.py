@@ -260,7 +260,10 @@ class IntroPage(QWizardPage):
 
     def check_pka(self):
         if re.match(r'^-?\d+(?:\.\d+)$', self.para2_pKa_edit.text()) is None:
-            pka = -2.
+            if re.match(r'^-?\d+(?:)$', self.para2_pKa_edit.text()):
+               pka = float(self.para2_pKa_edit.text()) 
+            else:
+                pka = -2.
         else:
             pka = float(self.para2_pKa_edit.text().replace(',', '.'))
 
@@ -871,13 +874,11 @@ class SimPage(QWizardPage):
                     # save figures in separate folder
                     for f in self.dic_figures.keys():
                         # create figure name and path
-                        figure_name = fname_save.split(
-                            '.')[0] + '_Graph-' + '-'.join(f.split(' ')) + '.'
+                        figure_name = fname_save.split('.')[0] + '_Graph-' + '-'.join(f.split(' ')) + '.'
 
                         for t in save_type:
                             # create an exporter instance, as an argument give it the item you wish to export
-                            exporter = pg.exporters.ImageExporter(
-                                self.dic_figures[f].getPlotItem())
+                            exporter = pg.exporters.ImageExporter(self.dic_figures[f].getPlotItem())
                             # set export parameters if needed
                             # (note this also affects height parameter)
                             exporter.parameters()['width'] = 1000
@@ -930,8 +931,10 @@ class SimPage(QWizardPage):
         # if integral available, convert to DataFrame
         if len(dres.keys()) != 0:
             int_out = pd.DataFrame.from_dict(dres)
-            int_out.index = ['integration range (s)', 'target pH', 'target Sum', 'integral target Sum', 
-                             'integral observed Sum', 'error']
+            # same columns as dres: 
+            # Int range(s), target pH, t90 pH, target Sum, t90 meas, integral target Sum, integral Sum, error
+            int_out.index = ['integration range (s)', 'target pH', 't90 pH', 'target Sum', 't90 meas sens', 
+                             'integral target Sum', 'integral observed Sum', 'error']
         else:
             int_out = None
 
@@ -965,7 +968,7 @@ class SimPage(QWizardPage):
                     raise ValueError(
                         'Typo error. Please check your pH entry: ' + line)
         elif ',' in line:
-            ls = [float(i) for i in line.split(',') if len(i) != 0]
+            ls = [float(i) for i in line.split(',') if len(i.strip()) != 0]
         else:
             ls.append(float(line))
         return ls
@@ -1031,7 +1034,6 @@ class SimPage(QWizardPage):
 
         global ls_lines, _integral_counter
         ls_lines, self.ls_xcoords, self.vlines_list = [], [], []
-        _integral_counter = 0
 
         # target concentrations
         df_res = pd.concat([self.sensor_ph['pH target'], self.sensor_para2['Base target'],
@@ -1085,12 +1087,11 @@ class SimPage(QWizardPage):
 
     def mouseMoved(self, event):
         global ls_lines
-
         # allow click only in combination with additionally pressed key – has to be on purpose
         modifiers = QApplication.keyboardModifiers()
         if modifiers != Qt.ControlModifier:  # change selected range
             return
-        if len(self.ls_xcoords) >= 2:
+        if len(self.ls_xcoords) > 2:
             self.ls_xcoords = list()
             self.int_button.setEnabled(False)
         else:
@@ -1109,6 +1110,10 @@ class SimPage(QWizardPage):
         # make vertical line drag-able and update x-value in list
         self.v_line.sigPositionChanged.connect(self.movedBoundary)
         ls_lines.append(self.v_line)
+        
+        # remove duplicates from list
+        ls_lines = list(dict.fromkeys(ls_lines))
+        self.ls_xcoords = list(dict.fromkeys(self.ls_xcoords))
 
         # allow integral calculation as soon as xcoords have been collected
         if len(self.ls_xcoords) == 2:
@@ -1142,12 +1147,11 @@ class SimPage(QWizardPage):
             grp = self.df4int.groupby('target_mg/L Sum')
             dfint_target = np.sum([(k * (grp.groups[k][-1] - grp.groups[k][0])) for k in grp.groups.keys()])
 
-            # Integration range (s), target pH, target Sum, integral target Sum, integral Sum, error
+            # Integration range (s), target pH, t90 pH, target Sum, t90 meas, integral target Sum, integral Sum, error
             result = list([(round(min(self.ls_xcoords), 2), round(max(self.ls_xcoords)), 2),
-                           self.df_res['target pH'].loc[min(
-                               self.ls_xcoords):max(self.ls_xcoords)].mean(),
-                           self.df_res['target_mg/L Sum'].mean(), dfint_calc, dfint_target,
-                           dfint_calc - dfint_target])
+                           self.df_res['target pH'].loc[min(self.ls_xcoords):max(self.ls_xcoords)].mean(),
+                           self.sensor_ph['t90'], self.df_res['target_mg/L Sum'].mean(), self.sensor_para2['t90'], 
+                           dfint_calc, dfint_target, dfint_calc - dfint_target])
 
             # add current results to dictionary (where all selected peak information are stored)
             dres[_integral_counter] = result
@@ -1165,6 +1169,7 @@ class SimPage(QWizardPage):
 
             # update figure plot
             self.vlines_list, ls_lines = list(), list()
+            self.ls_xcoords = list()
 
             # disable Integral button til 2 xcoords are selected
             self.int_button.setEnabled(False)
@@ -1192,29 +1197,25 @@ class IntegralWindow(QDialog):
 
         # close window button
         self.close_button = QPushButton('OK', self)
-        self.close_button.setFixedWidth(100),  self.close_button.setFont(
-            QFont('Helvetica Neue', int(fs_font*0.7)))
+        self.close_button.setFixedWidth(100),  self.close_button.setFont(QFont('Helvetica Neue', int(fs_font*0.7)))
         self.reset_button = QPushButton('Reset', self)
-        self.reset_button.setFixedWidth(100), self.reset_button.setFont(
-            QFont('Helvetica Neue', int(fs_font*0.7)))
+        self.reset_button.setFixedWidth(100), self.reset_button.setFont(QFont('Helvetica Neue', int(fs_font*0.7)))
         self.save_button = QPushButton('Save', self)
-        self.save_button.setFixedWidth(100), self.save_button.setFont(
-            QFont('Helvetica Neue', int(fs_font*0.7)))
+        self.save_button.setFixedWidth(100), self.save_button.setFont(QFont('Helvetica Neue', int(fs_font*0.7)))
 
         # create table to store data
         self.tab_report = QTableWidget(self)
-        self.tab_report.setColumnCount(6), self.tab_report.setRowCount(1)
-        self.tab_report.setHorizontalHeaderLabels(['Integration range (s)', 'Target pH', 'Target ' + self.sum_lbl,
-                                                   'Integral target ' + self.sum_lbl, 'Integral observed ' + self.sum_lbl,
-                                                   'Error'])
+        self.tab_report.setColumnCount(8), self.tab_report.setRowCount(1)
+        self.tab_report.setHorizontalHeaderLabels(['Integration range (s)', 'Target pH', 't90 pH', 'Target ' + self.sum_lbl,
+                                                   't90 meas sens', 'Integral target ' + self.sum_lbl, 'Integral observed ' +\
+                                                    self.sum_lbl, 'Error'])
         self.tab_report.resizeColumnsToContents()
         self.tab_report.resizeRowsToContents()
 
         # creating window layout
         mlayout2 = QVBoxLayout()
         vbox2_top, vbox2_middle, vbox2_bottom = QHBoxLayout(), QHBoxLayout(), QHBoxLayout()
-        mlayout2.addLayout(vbox2_top), mlayout2.addLayout(
-            vbox2_middle), mlayout2.addLayout(vbox2_bottom)
+        mlayout2.addLayout(vbox2_top), mlayout2.addLayout(vbox2_middle), mlayout2.addLayout(vbox2_bottom)
 
         # panel for integration results
         table_grp = QGroupBox("Results")
@@ -1265,11 +1266,9 @@ class IntegralWindow(QDialog):
             # columns: Integration range (s), target pH, target Sum, integral target Sum, integral Sum, error
             for en in enumerate(dres[c]):
                 if en[0] == 0:
-                    l = str(round(en[1][0], 2)) + ' - ' + \
-                        str(round(en[1][1], 2))
+                    l = str(round(en[1][0], 2)) + ' - ' + str(round(en[1][1], 2))
                 else:
                     l = str(round(en[1], 2))
-
                 item = QTableWidgetItem(l)
                 item.setTextAlignment(Qt.AlignRight)
 
@@ -1376,8 +1375,8 @@ def plot_phsensor4save(df_res):
 def plot_parasensor(df_res, para2, para3, analyte, color, para_sum, fig=None, ax=None, ax1=None):
     if analyte == 'base' or analyte == 'Base':
         df_target2 = df_res['target_mg/L Base'].dropna()
-        df_para2 = df_res['Base calc'].dropna()
         df_target3 = df_res['target_mg/L Acid'].dropna()
+        df_para2 = df_res['Base calc'].dropna()
         df_para3 = df_res['Acid calc'].dropna()
 
         if 'TAN' in para_sum:
@@ -1391,10 +1390,10 @@ def plot_parasensor(df_res, para2, para3, analyte, color, para_sum, fig=None, ax
             fig.setLabel('right', '<font>H<sub>2</sub>S</font>',
                          units='mg/L', color=dcolor['para3'])
     else:
+        df_target2 = df_res['target_mg/L Acid'].dropna() 
         df_target3 = df_res['target_mg/L Base'].dropna()
-        df_target2 = df_res['Base calc'].dropna()
-        df_para3 = df_res['target_mg/L Acid'].dropna()
         df_para2 = df_res['Acid calc'].dropna()
+        df_para3 = df_res['Base calc'].dropna()
         if 'TAN' in para_sum:
             fig.setLabel('right', '<font>NH<sub>3</sub></font>',
                          units='mg/L', color=dcolor['para2'])
@@ -1452,8 +1451,8 @@ def plot_paras4save(df_res, para2, para3, analyte, para_sum):
             fig.setLabel('right', '<font>H<sub>2</sub>S</font>', units='mg/L', **styles)
     else:
         df_target3 = df_res['target_mg/L Base'].dropna()
-        df_target2 = df_res['Base calc'].dropna()
-        df_para3 = df_res['target_mg/L Acid'].dropna()
+        df_para3 = df_res['Base calc'].dropna()
+        df_target2 = df_res['target_mg/L Acid'].dropna()
         df_para2 = df_res['Acid calc'].dropna()
         if 'TAN' in para_sum:
             fig.setLabel('right', '<font>NH<sub>3</sub></font>', units='mg/L', **styles)
@@ -1483,10 +1482,13 @@ def plot_paras4save(df_res, para2, para3, analyte, para_sum):
     ax.vb.sigResized.connect(updateViews)
 
     # adjust color
+    fig.getAxis('top').setPen(pg.mkPen(color=dcolor['background'], width=1.75))
     fig.getAxis('bottom').setPen(pg.mkPen(color=dcolor['background'], width=1.75))
     fig.getAxis('bottom').setTextPen(pg.mkPen(color=dcolor['background'], width=1.75))
     fig.getAxis('left').setPen(pg.mkPen(color=dcolor['background'], width=1.75))
     fig.getAxis('left').setTextPen(pg.mkPen(color=dcolor['background'], width=1.75))
+    fig.getAxis('right').setPen(pg.mkPen(color=dcolor['background'], width=1.75))
+    fig.getAxis('right').setTextPen(pg.mkPen(color=dcolor['background'], width=1.75))
     return fig
 
 
@@ -1506,7 +1508,16 @@ def plot_totalModel(df_res, para_sum, color, fig1=None):
 
     # set initial view
     fig1.setXRange(int(-0.5), int(df_sim.index[-1]*1.05))
-    fig1.setYRange(int(df_target.min()*0.15), int(df_target.max()*1.85))
+    if df_sim.max()*1.05 < int(df_target.max()*1.85):
+        if df_sim.min() > int(df_target.min()*0.15):
+            fig1.setYRange(int(df_sim.min()), df_sim.max()*1.05)
+        else:
+            fig1.setYRange(int(df_target.min()*0.15), df_sim.max()*1.05)
+    else: 
+        if df_sim.min() > int(df_target.min()*0.15):
+            fig1.setYRange(int(df_sim.min()), int(df_target.max()*1.85))
+        else:
+            fig1.setYRange(int(df_target.min()*0.15), int(df_target.max()*1.85))
 
     return fig1
 
