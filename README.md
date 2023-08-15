@@ -23,4 +23,4 @@ The package versions listed are the versions used when the so+ware is released. 
 Next to the readme file, a manual *Instruction.pdf* is uploaded. Here you will find a step-by-step guide on how to use the simulation software including a summary of the context and theory.
 
 ### Disclaimer
-The software has been tested for both MacOS (MacBook Pro – Apple M1, Version 13.4) and Windows (Version 10.0.19045). The original published version is linked to the following DOI: 10.5281/zenodo.8249688
+The software has been tested for both MacOS (MacBook Pro – Apple M1, Version 13.4) and Windows (Version 10.0.19045). The original published version is linked to the following DOI: [![DOI](https://zenodo.org/badge/417093693.svg)](https://zenodo.org/badge/latestdoi/417093693)
