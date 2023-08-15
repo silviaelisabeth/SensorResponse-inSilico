@@ -48,7 +48,7 @@ _integral_counter = 0       # helper scalar counting the integration
 ls_lines = list()           # list to collect integration boundaries in pyqtgraph
 dres = dict()               # simulation results
 # get the local path for relative directories
-loc_path = os.getcwd() + r'/2019-2022/Project_Fabi/py2exe/'
+loc_path = os.getcwd()      
 
 wizard_page_index = {"IntroPage": 0, "SimPage": 1}
 
@@ -75,10 +75,8 @@ class MagicWizard(QWizard):
 
         # add a background image
         path = os.path.join(loc_path + r'/picture/icon.icns')
-
         pixmap = QtGui.QPixmap(path)
-        pixmap = pixmap.scaled(
-            200, 200, QtCore.Qt.KeepAspectRatio, QtCore.Qt.SmoothTransformation)
+        pixmap = pixmap.scaled(200, 200, QtCore.Qt.KeepAspectRatio, QtCore.Qt.SmoothTransformation)
         self.setPixmap(QWizard.BackgroundPixmap, pixmap)
 
 
@@ -289,13 +287,6 @@ class IntroPage(QWizardPage):
                         if returnValue == QMessageBox.Ok:
                             pass
 
-            # elif 'TAN' in self.para2_name_edit.text() or 'TDS' in self.para2_name_edit.text():
-            #    msgBox = error_message(text="Please enter the name of the sensor you want to simulate,  not a total "
-            #                                "parameter.", type='Error')
-            #    returnValue = msgBox.exec()
-            #    if returnValue == QMessageBox.Ok:
-            #        pass
-
     def load_data(self):
         # opens a dialog window in the current path
         fname, filter = QFileDialog.getOpenFileName(self, "Select specific txt file for temperature compensation",
@@ -476,7 +467,7 @@ class SimPage(QWizardPage):
         vbox_middle.addWidget(hline)
 
         # left side of main window (-> data treatment)
-        vbox_top.addWidget(w)
+        # vbox_top.addWidget(w)
         vbox_top.setContentsMargins(5, 10, 10, 5)
 
         # ---------------------------------------------------------------------------------------------------------
@@ -779,7 +770,7 @@ class SimPage(QWizardPage):
         self.fig_para2sim.clear()
         self.ax_para2sim = self.fig_para2sim.plotItem
         self.ax1_para2sim.clear()
-        self.fig_para2sim.scene().addItem(self.ax1_para2sim)
+        # self.fig_para2sim.scene().addItem(self.ax1_para2sim)
         self.ax_para2sim.getAxis('right').linkToView(self.ax1_para2sim)
         self.ax1_para2sim.setXLink(self.ax_para2sim)
 
