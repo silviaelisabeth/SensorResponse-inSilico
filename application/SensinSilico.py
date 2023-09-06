@@ -9,7 +9,7 @@ from PyQt5.QtGui import *
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (QApplication, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QMessageBox, QGridLayout,
                              QLabel, QLineEdit, QGroupBox, QFileDialog, QFrame, QDialog, QTableWidget, QTableWidgetItem,
-                             QWizard, QWizardPage)
+                             QWizard, QWizardPage, QComboBox)
 from pyqtgraph import PlotWidget, plot
 import pyqtgraph as pg
 import pyqtgraph.exporters
@@ -17,6 +17,10 @@ from scipy import integrate
 import pandas as pd
 import numpy as np
 import os
+
+# branch 1 is used to implement the reviewer's comments. 
+# - allowing other concentrations -> drop down menu.
+#
 
 # .....................................................................................................................
 # global parameter
@@ -32,6 +36,11 @@ pg.setConfigOption('foreground', 'white')
 # known acud/base systems
 systems = dict({'TDS': dict({'base': ['HS-', 'HS', 'hs-', 'hs'], 'acid': ['H2S', 'h2s']}),
                 'TAN': dict({'base': ['NH3', 'nh3'], 'acid': ['NH4+', 'NH4', 'nh4+', 'nh4']})})
+ls_acidBase = [('TDS', 'HS-', 'H2S'), ('TAN', 'NH3', 'NH4+')]
+acidBase = (None, None, None)
+ls_unit = ['ppm', 'mg/L', 'mol/L']
+unit = None
+
 
 # fixed parameter depending on literature research
 ph_res = 1e-3              # resolution of the pH sensor
@@ -48,7 +57,7 @@ _integral_counter = 0       # helper scalar counting the integration
 ls_lines = list()           # list to collect integration boundaries in pyqtgraph
 dres = dict()               # simulation results
 # get the local path for relative directories
-loc_path = os.getcwd()      
+loc_path = os.getcwd() + r'/2019-2022/Project_Fabi/py2exe/'
 
 wizard_page_index = {"IntroPage": 0, "SimPage": 1}
 
@@ -89,6 +98,11 @@ class IntroPage(QWizardPage):
         self.initUI()
 
         # connect checkbox and load file button with a function
+        self.paraPair_label.currentIndexChanged.connect(self.onCurrentIndexChanged)
+        self.onCurrentIndexChanged(self.paraPair_label.currentIndex())
+        self.paraSum_conc_unit.currentIndexChanged.connect(self.onCurrentIndexChanged_Unit)
+        self.onCurrentIndexChanged_Unit(self.paraSum_conc_unit.currentIndex()) 
+
         self.para1_conc_edit.editingFinished.connect(self.checkRange)
         self.para2_name_edit.editingFinished.connect(self.checkRange)
         self.para2_pKa_edit.editingFinished.connect(self.check_pka)
@@ -106,80 +120,97 @@ class IntroPage(QWizardPage):
         self.registerField("t90 parameter2*", self.para2_respT_edit)
         self.registerField("pKa parameter2*", self.para2_pKa_edit)
         self.registerField("plateau time", self.plateau_time_edit)
+        self.registerField("unit*", self.paraSum_conc_unit, "currentText", self.paraSum_conc_unit.currentIndexChanged) 
+        self.registerField("acid/base*", self.paraPair_label, "currentText", self.paraPair_label.currentIndexChanged) 
 
     def initUI(self):
         # path for measurement file (csv)
         self.load_button = QPushButton('Load meas. file', self)
-        self.load_button.setFixedWidth(150), self.load_button.setFont(
-            QFont('Helvetica Neue', int(fs_font*0.7)))
+        self.load_button.setFixedWidth(150)
+        self.load_button.setFont(QFont('Helvetica Neue', int(fs_font*0.7)))
         self.inputFileLineEdit = QLineEdit(self)
         self.inputFileLineEdit.setValidator(QtGui.QDoubleValidator())
-        self.inputFileLineEdit.setFixedWidth(
-            375), self.inputFileLineEdit.setAlignment(Qt.AlignRight)
-        self.inputFileLineEdit.setFont(
-            QFont('Helvetica Neue', int(0.7 * fs_font)))
+        self.inputFileLineEdit.setFixedWidth(375) 
+        self.inputFileLineEdit.setAlignment(Qt.AlignRight)
+        self.inputFileLineEdit.setFont(QFont('Helvetica Neue', int(0.7 * fs_font)))
 
         # directory to store files
         self.save_button = QPushButton('Storage path', self)
-        self.save_button.setFixedWidth(150), self.save_button.setFont(
-            QFont('Helvetica Neue', int(fs_font*0.7)))
+        self.save_button.setFixedWidth(150)
+        self.save_button.setFont(QFont('Helvetica Neue', int(fs_font*0.7)))
         self.inputSaveLineEdit = QLineEdit(self)
         self.inputSaveLineEdit.setValidator(QtGui.QDoubleValidator())
-        self.inputSaveLineEdit.setFixedWidth(
-            375), self.inputSaveLineEdit.setAlignment(Qt.AlignRight)
-        self.inputSaveLineEdit.setFont(
-            QFont('Helvetica Neue', int(0.7 * fs_font)))
+        self.inputSaveLineEdit.setFixedWidth(375)
+        self.inputSaveLineEdit.setAlignment(Qt.AlignRight)
+        self.inputSaveLineEdit.setFont(QFont('Helvetica Neue', int(0.7 * fs_font)))
 
         # create label for parameters | name, concentration, response time, and pKa (if applicable)
         # while the first parameter will always be pH, the second varies
-        para1_lbl, para1_name_lbl, para2_lbl, para2_name_lbl = QLabel(
-            self), QLabel(self), QLabel(self), QLabel(self)
-        para1_lbl.setText('Sensor · 1'), para1_name_lbl.setText('Name')
-        para2_lbl.setText('Sensor · 2'), para2_name_lbl.setText('Name')
+        para1_lbl, para1_name_lbl, para2_lbl, para2_name_lbl = QLabel(self), QLabel(self), QLabel(self), QLabel(self)
+        para1_lbl.setText('Sensor · 1')
+        para1_name_lbl.setText('Name')
+        para2_lbl.setText('Sensor · 2')
+        para2_name_lbl.setText('Name')
         para1_name, self.para2_name_edit = QLabel(self), QLineEdit(self)
-        para1_name.setText('pH'), para1_name.setAlignment(Qt.AlignRight)
+        para1_name.setText('pH')
+        para1_name.setAlignment(Qt.AlignRight)
         self.para2_name_edit.setAlignment(Qt.AlignRight)
 
         para1_conc_lbl, paraSum_conc_lbl = QLabel(self), QLabel(self)
-        para1_conc_unit, paraSum_conc_unit = QLabel(self), QLabel(self)
-        para1_conc_lbl.setText('pH value(s)'), paraSum_conc_lbl.setText(
-            'Concentration(s) sum parameter')
-        para1_conc_unit.setText(''), paraSum_conc_unit.setText('mg/L')
-        self.para1_conc_edit, self.paraSum_conc_edit = QLineEdit(
-            self), QLineEdit(self)
-        self.para1_conc_edit.setValidator(
-            QRegExpValidator()), self.para1_conc_edit.setAlignment(Qt.AlignRight)
-        self.paraSum_conc_edit.setValidator(
-            QRegExpValidator()), self.paraSum_conc_edit.setAlignment(Qt.AlignRight)
+        para1_conc_unit, self.paraSum_conc_unit = QLabel(self), QComboBox(self)
+        para1_conc_lbl.setText('pH value(s)')
+        paraSum_conc_lbl.setText('Concentration(s) sum parameter')
+        para1_conc_unit.setText('')
+        self.paraSum_conc_unit.setView(QtWidgets.QListView())
+        [self.paraSum_conc_unit.addItem(k) for k in ['Select unit ...']+ls_unit]
+
+        self.para1_conc_edit, self.paraSum_conc_edit = QLineEdit(self), QLineEdit(self)
+        self.para1_conc_edit.setValidator(QRegExpValidator())
+        self.para1_conc_edit.setAlignment(Qt.AlignRight)
+        self.paraSum_conc_edit.setValidator(QRegExpValidator())
+        self.paraSum_conc_edit.setAlignment(Qt.AlignRight)
 
         para1_respT_lbl, para2_respT_lbl = QLabel(self), QLabel(self)
-        para1_respT_lbl.setText(
-            'Response time'), para2_respT_lbl.setText('Response time')
+        para1_respT_lbl.setText('Response time')
+        para2_respT_lbl.setText('Response time')
         para1_respT_unit, para2_respT_unit = QLabel(self), QLabel(self)
-        para1_respT_unit.setText('s'), para2_respT_unit.setText('s')
-        self.para1_respT_edit, self.para2_respT_edit = QLineEdit(
-            self), QLineEdit(self)
-        self.para1_respT_edit.setValidator(
-            QRegExpValidator()), self.para1_respT_edit.setAlignment(Qt.AlignRight)
-        self.para2_respT_edit.setValidator(
-            QRegExpValidator()), self.para2_respT_edit.setAlignment(Qt.AlignRight)
+        para1_respT_unit.setText('s')
+        para2_respT_unit.setText('s')
+        self.para1_respT_edit, self.para2_respT_edit = QLineEdit(self), QLineEdit(self)
+        self.para1_respT_edit.setValidator(QRegExpValidator())
+        self.para1_respT_edit.setAlignment(Qt.AlignRight)
+        self.para2_respT_edit.setValidator(QRegExpValidator())
+        self.para2_respT_edit.setAlignment(Qt.AlignRight)
 
         para2_pKa_lbl, self.para2_pKa_edit = QLabel(self), QLineEdit(self)
-        para2_pKa_lbl.setText('pKa'), self.para2_pKa_edit.setValidator(
-            QRegExpValidator())
+        para2_pKa_lbl.setText('pKa')
+        self.para2_pKa_edit.setValidator(QRegExpValidator())
         self.para2_pKa_edit.setAlignment(Qt.AlignRight)
 
         # create plateau time
         plateau_time_lbl, plateau_time_unit = QLabel(self), QLabel(self)
-        plateau_time_lbl.setText(
-            'Plateau time'), plateau_time_unit.setText('s')
+        plateau_time_lbl.setText('Plateau time')
+        plateau_time_unit.setText('s')
         self.plateau_time_edit = QLineEdit(self)
-        self.plateau_time_edit.setValidator(
-            QDoubleValidator()), self.plateau_time_edit.setAlignment(Qt.AlignRight)
+        self.plateau_time_edit.setValidator(QDoubleValidator())
+        self.plateau_time_edit.setAlignment(Qt.AlignRight)
         self.plateau_time_edit.setText('75.')
 
+        # additional information for corresponding acid/base pair and sum parameter
+        global systems
+        paraPair_label = QLabel(self)
+        paraPair_label.setText('Corresponding acid/base pair')
+        self.paraPair_label = QComboBox(self)
+        self.paraPair_label.setView(QtWidgets.QListView())
+        self.paraPair_label.addItem('Select acid/base pair ...')
+        for k in systems.keys():
+            for i in [(k, systems[k]['base'][0], systems[k]['acid'][0])]:        
+                self.paraPair_label.addItem(', '.join([str(j.strip())[1:-1] for j in str(i)[1:-1].split(',')]))
+        self.paraPair_label.addItem('Add other acid/base pairs ...')
+
         divider, divider1 = QLabel(self), QLabel(self)
-        divider.setText('   '), divider1.setText('   ')
+        divider.setText('   ')
+        divider1.setText('   ')
 
         # -----------------------------------------------------------------------
         # creating main window (GUI)
@@ -187,13 +218,15 @@ class IntroPage(QWizardPage):
         # create layout grid
         mlayout = QVBoxLayout(w)
         vbox_top, vbox_middle, vbox_bottom = QHBoxLayout(), QHBoxLayout(), QHBoxLayout()
-        mlayout.addLayout(vbox_top), mlayout.addLayout(
-            vbox_middle), mlayout.addLayout(vbox_bottom)
+        mlayout.addLayout(vbox_top)
+        mlayout.addLayout(vbox_middle)
+        mlayout.addLayout(vbox_bottom)
 
         meas_settings = QGroupBox("Parameter Settings for Simulation")
         meas_settings.setStyleSheet("QGroupBox { font-weight: bold; } ")
         grid_load = QGridLayout()
-        meas_settings.setFixedHeight(250), meas_settings.setFixedWidth(1000)
+        meas_settings.setFixedHeight(275)
+        meas_settings.setFixedWidth(1000)
         meas_settings.setFont(QFont('Helvetica Neue', 12))
         vbox_top.addWidget(meas_settings)
         meas_settings.setLayout(grid_load)
@@ -203,44 +236,48 @@ class IntroPage(QWizardPage):
         grid_load.addWidget(plateau_time_lbl, 0, 0)
         grid_load.addWidget(self.plateau_time_edit, 0, 2)
         grid_load.addWidget(plateau_time_unit, 0, 3)
-        grid_load.addWidget(paraSum_conc_lbl, 1, 0)
-        grid_load.addWidget(self.paraSum_conc_edit, 1, 2)
-        grid_load.addWidget(paraSum_conc_unit, 1, 3)
-        grid_load.addWidget(divider, 2, 2)
+        grid_load.addWidget(paraPair_label, 1, 0)
+        grid_load.addWidget(self.paraPair_label, 1, 2)
+
+        grid_load.addWidget(paraSum_conc_lbl, 2, 0)
+        grid_load.addWidget(self.paraSum_conc_edit, 2, 2)
+        grid_load.addWidget(self.paraSum_conc_unit, 2, 3)
+        grid_load.addWidget(divider, 3, 2)
 
         # information for parameter 1
-        grid_load.addWidget(para1_lbl, 3, 0)
-        grid_load.addWidget(para1_name_lbl, 3, 1)
-        grid_load.addWidget(para1_name, 3, 2)
-        grid_load.addWidget(para1_conc_lbl, 4, 1)
-        grid_load.addWidget(self.para1_conc_edit, 4, 2)
-        grid_load.addWidget(para1_conc_unit, 4, 3)
-        grid_load.addWidget(para1_respT_lbl, 5, 1)
-        grid_load.addWidget(self.para1_respT_edit, 5, 2)
-        grid_load.addWidget(para1_respT_unit, 5, 3)
-        grid_load.addWidget(divider1, 6, 2)
+        grid_load.addWidget(para1_lbl, 4, 0)
+        grid_load.addWidget(para1_name_lbl, 4, 1)
+        grid_load.addWidget(para1_name, 4, 2)
+        grid_load.addWidget(para1_conc_lbl, 5, 1)
+        grid_load.addWidget(self.para1_conc_edit, 5, 2)
+        grid_load.addWidget(para1_conc_unit, 5, 3)
+        grid_load.addWidget(para1_respT_lbl, 6, 1)
+        grid_load.addWidget(self.para1_respT_edit, 6, 2)
+        grid_load.addWidget(para1_respT_unit, 6, 3)
+        grid_load.addWidget(divider1, 7, 2)
 
         # information for parameter 2
-        grid_load.addWidget(para2_lbl, 7, 0)
-        grid_load.addWidget(para2_name_lbl, 7, 1)
-        grid_load.addWidget(self.para2_name_edit, 7, 2)
-        grid_load.addWidget(para2_respT_lbl, 8, 1)
-        grid_load.addWidget(self.para2_respT_edit, 8, 2)
-        grid_load.addWidget(para2_respT_unit, 8, 3)
-        grid_load.addWidget(para2_pKa_lbl, 9, 1)
-        grid_load.addWidget(self.para2_pKa_edit, 9, 2)
+        grid_load.addWidget(para2_lbl, 8, 0)
+        grid_load.addWidget(para2_name_lbl, 8, 1)
+        grid_load.addWidget(self.para2_name_edit, 8, 2)
+        grid_load.addWidget(para2_respT_lbl, 9, 1)
+        grid_load.addWidget(self.para2_respT_edit, 9, 2)
+        grid_load.addWidget(para2_respT_unit, 9, 3)
+        grid_load.addWidget(para2_pKa_lbl, 10, 1)
+        grid_load.addWidget(self.para2_pKa_edit, 10, 2)
 
         divide_group = QGroupBox()
         divide_group.setStyleSheet("QGroupBox { border: 0px solid #383e42;}")
         grid_divide = QGridLayout()
-        divide_group.setFixedHeight(100)
+        divide_group.setMinimumHeight(75)
         vbox_middle.addWidget(divide_group)
         divide_group.setLayout(grid_divide)
 
         meas_file = QGroupBox("Define Directories")
         meas_file.setStyleSheet("QGroupBox { font-weight: bold; } ")
         grid_file = QGridLayout()
-        meas_file.setFixedHeight(100), meas_file.setFixedWidth(1000)
+        meas_file.setFixedHeight(100)
+        meas_file.setFixedWidth(1000)
         meas_file.setFont(QFont('Helvetica Neue', 12))
         vbox_bottom.addWidget(meas_file)
         meas_file.setLayout(grid_file)
@@ -253,8 +290,17 @@ class IntroPage(QWizardPage):
 
         self.setLayout(mlayout)
         # margin order left, top, right, bottom
-        self.layout().setContentsMargins(50, 50, 170, 170)
+        self.layout().setContentsMargins(50, 50, 170, 50)
         self.layout().addStretch()
+
+    def check_measSensor(self):
+        global ls_acidBase
+        ls_check = [True for p in ls_acidBase if self.para2_name_edit.text() in p]
+        if len(ls_check) == 0:
+            # raise Error that the measurement sensor does not fit to the defined system
+            msgBox = error_message(text="The defined measurment sensor does not fit the  defined"
+                                   "acid/base pair", type='Error')
+            msgBox.exec_()
 
     def check_pka(self):
         if re.match(r'^-?\d+(?:\.\d+)$', self.para2_pKa_edit.text()) is None:
@@ -273,6 +319,9 @@ class IntroPage(QWizardPage):
                 pass
 
     def checkRange(self):
+        if self.para2_name_edit.text():
+            self.check_measSensor()
+
         if self.para1_conc_edit.text() and self.para2_name_edit.text():
             # check whether we work with H2S sensor / TDS project
             condA = ('H2S' in self.para2_name_edit.text()
@@ -301,15 +350,13 @@ class IntroPage(QWizardPage):
                 df_general.loc['plateau time (s)'].to_numpy()[0])
 
             # pH sensor
-            self.para1_respT_edit.setText(
-                df_ph.loc['t90 (s)', df_ph.columns[0]])
+            self.para1_respT_edit.setText(df_ph.loc['t90 (s)', df_ph.columns[0]])
             ph_target = df_ph.loc['target values', df_ph.columns[0]]
             self.para1_conc_edit.setText(ph_target)
 
             # info for sensor 2 and total parameter concentration
             self.para2_name_edit.setText(para2)
-            self.para2_respT_edit.setText(
-                df_para.loc['t90 (s)', df_para.columns[0]])
+            self.para2_respT_edit.setText(df_para.loc['t90 (s)', df_para.columns[0]])
             self.para2_pKa_edit.setText(df_para.loc['pKa', df_para.columns[0]])
             self.paraSum_conc_edit.setText(
                 df_total.loc['target values'].to_numpy()[0])
@@ -322,8 +369,131 @@ class IntroPage(QWizardPage):
             self.inputSaveLineEdit.setText(fsave)
             self.fsave.setText(fsave)
 
+    def onCurrentIndexChanged_Unit(self, index):
+        global unit
+        unit = ls_unit[index-1]
+
+    def onCurrentIndexChanged(self, index):
+        global acidBase, ls_acidBase
+        # if the last item was selected, then open another window to edit acid/base pair. 
+        # counting starts with 0, hence lenght of combobox-1 
+        if index == self.paraPair_label.count()-1:
+            # open a pop up window with options to select what shall be saved
+            global wEdit
+            wEdit = AcidBasePair(index, self.paraPair_label)
+
+            if wEdit.isVisible() is False:
+                wEdit.show() 
+        else:
+            acidBase = ls_acidBase[index-1]
+        
     def nextId(self) -> int:
         return wizard_page_index["SimPage"]
+
+
+class AcidBasePair(QDialog):
+    def __init__(self, index, box):
+        super().__init__()
+        self.index, self.box, self.indDone = index, box, 0
+        # set title and initiate general layout
+        self.initUI()
+
+        # -----------------------------------------------------------
+        # add action function when done with editing
+        self.paraSum_label_edit.editingFinished.connect(self.updateComboBox)
+        self.paraAcid_label_edit.editingFinished.connect(self.updateComboBox)
+        self.paraBase_label_edit.editingFinished.connect(self.updateComboBox)
+        self.close_button.clicked.connect(self.close_window)
+        
+    def initUI(self):
+        self.setWindowTitle("Add Corresp. Acid/Base Pair")
+        # define geometry of integration window x, y, width, height
+        self.setGeometry(50, 100, 300, 300)
+
+        # DONE button
+        self.close_button = QPushButton('DONE', self)
+        self.close_button.setFixedWidth(100)
+        self.close_button.setEnabled(False)
+
+        # acid, base and sum parameter text window
+        paraSum_label = QLabel(self)
+        paraSum_label.setText('Sum Parameter')
+
+        self.paraSum_label_edit = QLineEdit(self)
+        self.paraSum_label_edit.setAlignment(Qt.AlignRight)
+
+        paraAcid_label = QLabel(self)
+        paraAcid_label.setText('Corresponding Acid')
+
+        self.paraAcid_label_edit = QLineEdit(self)
+        self.paraAcid_label_edit.setAlignment(Qt.AlignRight)
+
+        paraBase_label = QLabel(self)
+        paraBase_label.setText('Corresponding Base')
+        self.paraBase_label_edit = QLineEdit(self)
+        self.paraBase_label_edit.setAlignment(Qt.AlignRight)
+
+        # creating window layout
+        mlayoutP = QVBoxLayout()
+        vbox_center = QHBoxLayout()
+        mlayoutP.addLayout(vbox_center)
+
+        # panel for integration results
+        pair_grp = QGroupBox("Define your System")
+        grid_pair = QGridLayout()
+        pair_grp.setFont(QFont('Helvetica Neue', 10))
+        vbox_center.addWidget(pair_grp)
+        pair_grp.setLayout(grid_pair)
+
+        grid_pair.addWidget(paraSum_label, 0, 0)
+        grid_pair.addWidget(self.paraSum_label_edit, 0, 1)
+        grid_pair.addWidget(paraAcid_label, 1, 0)
+        grid_pair.addWidget(self.paraAcid_label_edit, 1, 1)
+        grid_pair.addWidget(paraBase_label, 2, 0)
+        grid_pair.addWidget(self.paraBase_label_edit, 2, 1)
+        grid_pair.addWidget(self.close_button, 4, 1) 
+
+         # add everything to the window layout
+        self.setLayout(mlayoutP)
+
+    def updateComboBox(self):
+        if self.paraSum_label_edit.text() and self.paraAcid_label_edit.text() and self.paraBase_label_edit.text():
+            # collect the parameters and update the global dictonary of provided systems
+            global systems, ls_acidBase
+            if self.paraSum_label_edit.text() in systems.keys():
+                if self.paraAcid_label_edit.text() not in systems[self.paraSum_label_edit.text()]['acid']:
+                    systems[self.paraSum_label_edit.text()]['acid'].append(self.paraAcid_label_edit.text())
+                if self.paraBase_label_edit.text() not in systems[self.paraSum_label_edit.text()]['base']:
+                    systems[self.paraSum_label_edit.text()]['base'].append(self.paraBase_label_edit.text())               
+            else:
+                systems[self.paraSum_label_edit.text()] = dict({'base': [self.paraBase_label_edit.text()],
+                                                                'acid': [self.paraAcid_label_edit.text()]})
+            
+            ls_acidBase.append((self.paraSum_label_edit.text(), self.paraAcid_label_edit.text(), self.paraBase_label_edit.text()))
+            # allow closing the window when all parameters are provided
+            self.close_button.setEnabled(True)
+
+    def close_window(self):
+        global ls_acidBase, acidBase
+        acidBase = ls_acidBase[self.index-1]
+        initializeComboBox(box=self.box)
+        self.hide()
+
+
+def initializeComboBox(box):
+    global ls_acidBase
+    # clear comboBox
+    box.clear()
+    # add all items to comboBox (without duplicates)
+    box.addItem('Select acid/base pair ...')
+    for k in list(dict.fromkeys(ls_acidBase)):
+        box.addItem(', '.join([str(j.strip())[1:-1] for j in str(k)[1:-1].split(',')]))
+    box.addItem('Add other acid/base pairs ...') 
+    box.setCurrentIndex(len(ls_acidBase))
+
+    # after updating the comboBox and selecting the defined acid/base pair, close window
+    global wEdit
+    wEdit.close()
 
 
 # .....................................................................................................................
@@ -356,7 +526,7 @@ class SimPage(QWizardPage):
         self.saveR_button.clicked.connect(self.save_report)
 
     def initUI(self):
-        # parameters
+        # general parameters
         tsteady_lbl, tsteady_unit = QLabel(self), QLabel(self)
         tsteady_lbl.setText('Plateau time')
         tsteady_unit.setText('s')
@@ -379,8 +549,7 @@ class SimPage(QWizardPage):
         self.ph_t90_edit.setAlignment(Qt.AlignRight)
 
         # second sensor settings
-        self.para2_lbl, para2_unit = QLabel(self), QLabel(self)
-        para2_unit.setText('mg/L')
+        self.para2_lbl, self.para2_unit = QLabel(self), QLabel(self)
         self.paraSum_conc_edit = QLineEdit(self)
         self.paraSum_conc_edit.setFixedWidth(100)
         self.paraSum_conc_edit.setValidator(QRegExpValidator())
@@ -421,7 +590,7 @@ class SimPage(QWizardPage):
         self.saveR_button = QPushButton('Save report', self)
         self.saveR_button.setFixedWidth(100)
         self.saveR_button.setFont(QFont('Helvetica Neue', int(fs_font*0.7)))
-
+  
         # ---------------------------------------------------------------------------------------
         w = QWidget()
         mlayout = QVBoxLayout(w)
@@ -465,9 +634,8 @@ class SimPage(QWizardPage):
         hline.setFrameShape(QFrame.HLine | QFrame.Raised)
         hline.setLineWidth(2)
         vbox_middle.addWidget(hline)
-
+        
         # left side of main window (-> data treatment)
-        # vbox_top.addWidget(w)
         vbox_top.setContentsMargins(5, 10, 10, 5)
 
         # ---------------------------------------------------------------------------------------------------------
@@ -485,8 +653,7 @@ class SimPage(QWizardPage):
         # -------------------------------------------------------------------------------------------
         # GroupBoxes to structure the layout
         navigation_group = QGroupBox("Navigation Tool Bar")
-        navigation_group.setStyleSheet(
-            "QGroupBox { font - weight: bold; border: 0px solid gray;}")
+        navigation_group.setStyleSheet("QGroupBox { font - weight: bold; border: 0px solid gray;}")
         grid_load = QGridLayout()
         navigation_group.setFixedHeight(70)
         vbox_bottom.addWidget(navigation_group)
@@ -503,28 +670,26 @@ class SimPage(QWizardPage):
 
         # create GroupBox to structure the layout
         general_group = QGroupBox("General Settings")
-        general_group.setStyleSheet(
-            "QGroupBox { font - weight: bold; border: 0px solid gray;}")
-        general_group.setFixedHeight(75)
+        general_group.setStyleSheet("QGroupBox { font - weight: bold; border: 0px solid gray;}")
+        general_group.setMinimumHeight(300)
         grid_load = QGridLayout()
-        grid_load.setSpacing(5)
-        grid_load.setVerticalSpacing(2)
+        grid_load.setSpacing(1)
+        grid_load.setVerticalSpacing(1)        
 
         # add GroupBox to layout and load buttons in GroupBox
         hbox_ltop.addWidget(general_group)
         general_group.setLayout(grid_load)
-        grid_load.addWidget(tsteady_lbl, 1, 0)
-        grid_load.addWidget(self.tsteady_edit, 1, 1)
-        grid_load.addWidget(tsteady_unit, 1, 2)
+        grid_load.addWidget(tsteady_lbl, 0, 0)
+        grid_load.addWidget(self.tsteady_edit, 0, 1)
+        grid_load.addWidget(tsteady_unit, 0, 2)
 
-        general_group.setContentsMargins(1, 15, 15, 1)
+        general_group.setContentsMargins(1, 2, 10, 1)
         hbox_ltop.addSpacing(10)
 
         # -----------------------
         # pH Sensor Settings
         phsens_group = QGroupBox("pH Sensor Settings")
-        phsens_group.setStyleSheet(
-            "QGroupBox { font - weight: bold; border: 0px solid gray;}")
+        phsens_group.setStyleSheet("QGroupBox { font - weight: bold; border: 0px solid gray;}")
         phsens_group.setFixedHeight(110)
         grid_load = QGridLayout()
         grid_load.setSpacing(5)
@@ -546,8 +711,7 @@ class SimPage(QWizardPage):
         # -----------------------
         # Settings of the other sensor
         self.para23sens_group = QGroupBox()
-        self.para23sens_group.setStyleSheet(
-            "QGroupBox { font - weight: bold; border: 0px solid gray;}")
+        self.para23sens_group.setStyleSheet("QGroupBox { font - weight: bold; border: 0px solid gray;}")
         self.para23sens_group.setFixedHeight(150)
         grid_load = QGridLayout()
         grid_load.setSpacing(5)
@@ -559,7 +723,7 @@ class SimPage(QWizardPage):
 
         grid_load.addWidget(self.para2_lbl, 0, 0)
         grid_load.addWidget(self.paraSum_conc_edit, 0, 1)
-        grid_load.addWidget(para2_unit, 0, 2)
+        grid_load.addWidget(self.para2_unit, 0, 2)
         grid_load.addWidget(para2_t90_lbl, 1, 0)
         grid_load.addWidget(self.para2_t90_edit, 1, 1)
         grid_load.addWidget(para2_t90_unit, 1, 2)
@@ -572,10 +736,8 @@ class SimPage(QWizardPage):
         # --------------------------------------------------------------------------------------------------------------
         # pH Simulation
         self.fig_phsim = pg.PlotWidget()
-        self.fig_phsim.setLabel(
-            'left', '<font>pH value</font>', color=dcolor['font'])
-        self.fig_phsim.setLabel(
-            'bottom', '<font>Time</font>', units='<font>s</font>', color=dcolor['font'])
+        self.fig_phsim.setLabel('left', '<font>pH value</font>', color=dcolor['font'])
+        self.fig_phsim.setLabel('bottom', '<font>Time</font>', units='<font>s</font>', color=dcolor['font'])
 
         # create GroupBox to structure the layout
         phsim_group = QGroupBox("pH Sensor Simulation")
@@ -597,14 +759,6 @@ class SimPage(QWizardPage):
         self.fig_para2sim.scene().addItem(self.ax1_para2sim)
         self.ax_para2sim.getAxis('right').linkToView(self.ax1_para2sim)
         self.ax1_para2sim.setXLink(self.ax_para2sim)
-
-        # Axes layout
-        self.ax_para2sim.setLabel(
-            'bottom', '<font>Time</font>', units='<font>s</font>', color=dcolor['font'])
-        self.ax_para2sim.setLabel('left', '<font>Measured analyte</font>', units='<font>mg/L</font>',
-                                  color=dcolor['font'])
-        self.ax_para2sim.setLabel('right', '<font>Determined analyte</font>', units='<font>mg/L</font>',
-                                  color=dcolor['font'])
 
         def updateViews():
             # view has resized; update auxiliary views to match
@@ -669,34 +823,29 @@ class SimPage(QWizardPage):
 
     def initializePage(self):
         self.save_path = self.field("Storage path")
-        self.para1_conc, self.para2_conc = self.field(
-            "conc. parameter1"), self.field("conc. sum parameter")
+        self.para1_conc, self.para2_conc = self.field("conc. parameter1"), self.field("conc. sum parameter")
         if isinstance(self.field("t90 parameter1"), type(None)):
             self.para1_respT = self.field("t90 parameter1")
         else:
-            self.para1_respT = str(self.field(
-                "t90 parameter1").replace(',', '.'))
+            self.para1_respT = str(self.field("t90 parameter1").replace(',', '.'))
         if isinstance(self.field("t90 parameter2"), type(None)):
             self.para2_respT = self.field("t90 parameter2")
         else:
-            self.para2_respT = str(self.field(
-                "t90 parameter2").replace(',', '.'))
+            self.para2_respT = str(self.field("t90 parameter2").replace(',', '.'))
         if isinstance(self.field("pKa parameter2"), type(None)):
             self.para2_pka = self.field("pKa parameter2")
         else:
-            self.para2_pka = str(self.field(
-                "pKa parameter2").replace(',', '.'))
+            self.para2_pka = str(self.field("pKa parameter2").replace(',', '.'))
         if isinstance(self.field("plateau time"), type(None)):
             self.plateau_time = self.field("plateau time")
         else:
-            self.plateau_time = float(self.field(
-                "plateau time").replace(',', '.'))
-
+            self.plateau_time = float(self.field("plateau time").replace(',', '.'))
         self.para2_name = self.field("parameter2")
         
         # identify the system according to given parameter
         # para2 will be the measured, para3 the calculated parameter
-        global systems
+        global systems, acidBase
+        print(848, self.para2_name)
         if self.para2_name:
             # H2S/HS- known system
             if self.para2_name in systems['TDS']['base']:
@@ -718,19 +867,53 @@ class SimPage(QWizardPage):
                 self.para2, self.para3, self.total_para = 'NH$_4^+$', 'NH$_3$', '$TAN$'
                 self.analyte = 'acid'
 
+            # if unknown use (sum, acid, base) by getting the next keyword from system-dictionary
+            ls_keyNew = list()
+            for k in systems.keys():
+                if k != 'TAN' and k != 'TDS':
+                    ls_keyNew.append(k)
+
+            if len(ls_keyNew) > 0:
+                self.total_para, self.total_para_grp = acidBase[0], acidBase[0]
+                # define whether it is acid or base: 
+                if self.para2_name in systems[ls_keyNew[0]]['acid']:
+                    self.analyte = 'acid'
+                    self.para2, self.para2_grp = systems[ls_keyNew[0]]['acid'], systems[ls_keyNew[0]]['acid']
+                    self.para3, self.para3_grp = systems[ls_keyNew[0]]['base'], systems[ls_keyNew[0]]['base']
+                elif self.para2_name in systems[ls_keyNew[0]]['base']:
+                    self.analyte = 'base'
+                    self.para2, self.para2_grp = systems[ls_keyNew[0]]['base'], systems[ls_keyNew[0]]['base']
+                    self.para3, self.para3_grp = systems[ls_keyNew[0]]['acid'], systems[ls_keyNew[0]]['acid']
+
+                if isinstance(self.para2, list):
+                    self.para2, self.para2_grp = self.para2[0], self.para2_grp[0]
+                if isinstance(self.para3, list):
+                    self.para3, self.para3_grp = self.para3[0], self.para3_grp[0]
+                    
             # if unknown use "base / acid / sum" (the first one is the measured, the second one the calculated)
             if '/' in self.para2_name:
                 system = self.para2_name.split('/')
-                self.para2_grp, self.para3_grp, self.total_para_grp = system[
-                    0], system[1], system[-1]
+                self.para2_grp, self.para3_grp, self.total_para_grp = system[0], system[1], system[-1]
                 self.para2, self.para3, self.total_para = system[0], system[1], system[-1]
                 self.analyte = system[0]
         else:
             self.para2_grp, self.para3_grp, self.total_para_grp = 'Base', 'Acid', 'Sum Parmeter'
             self.para2, self.para3, self.total_para = 'base', 'acid', 'sum parmeter'
             self.analyte = 'sum parmeter'
+        self.system_select = (self.para2_grp, self.para3_grp, self.total_para_grp)
 
         # fill in parameters
+        global unit
+        self.para2_unit.setText(unit)
+        
+        # Initialize units for axes
+        self.ax_para2sim.setLabel('bottom', '<font>Time</font>', units='<font>s</font>', color=dcolor['font'])
+        self.ax_totalsim.setLabel('bottom', '<font>Time</font>', units='<font>s</font>', color=dcolor['font'])
+
+        self.ax_para2sim.setLabel('left', '<font>Measured analyte</font>', units='<font>{}</font>'.format(unit), color=dcolor['font'])
+        self.ax_para2sim.setLabel('right', '<font>Determined analyte</font>', units='<font>{}</font>'.format(unit), color=dcolor['font'])
+        self.ax_totalsim.setLabel('left', '<font>Sum concentration</font>', units='<font>{}</font>'.format(unit), color=dcolor['font'])
+
         if self.plateau_time:
             self.tsteady_edit.setText(str(self.plateau_time))
         self.ph_edit.setText(self.para1_conc)
@@ -741,12 +924,9 @@ class SimPage(QWizardPage):
         self.para2_t90_edit.setText(self.para2_respT)
         self.para2_pka_edit.setText(self.para2_pka)
 
-        self.totalsim_group.setTitle(
-            "{} Simulation".format(self.total_para_grp))
-        self.para2sim_group.setTitle(
-            "{}/{} Simulation".format(self.para2_grp, self.para3_grp))
-        self.para23sens_group.setTitle(
-            "{}/{} Sensor Settings".format(self.para2_grp, self.para3_grp))
+        self.totalsim_group.setTitle("{} Simulation".format(acidBase[0]))
+        self.para2sim_group.setTitle("{}/{} Simulation".format(acidBase[1], acidBase[2]))
+        self.para23sens_group.setTitle("{}/{} Sensor Settings".format(acidBase[1], acidBase[2]))
 
         return
 
@@ -759,30 +939,33 @@ class SimPage(QWizardPage):
         self.paraSum_conc_edit.setText('100.0')
         self.para2_t90_edit.setText('60.')
         self.para2_pka_edit.setText('9.25')
+        #self.para2_lbl.setText('c(Sum)')
+
+        # set default
+        #self.initializePage()
 
     def clear_phsim(self):
         self.fig_phsim.clear()
-        self.fig_phsim.setLabel(
-            'bottom', '<font>Time</font>', units='<font>s</font>', color=dcolor['font'])
+        self.fig_phsim.setLabel('bottom', '<font>Time</font>', units='<font>s</font>', color=dcolor['font'])
         self.fig_phsim.setLabel('left', 'pH value', color=dcolor['font'])
 
     def clear_para2timedrive(self):
+        global unit
         self.fig_para2sim.clear()
         self.ax_para2sim = self.fig_para2sim.plotItem
         self.ax1_para2sim.clear()
-        # self.fig_para2sim.scene().addItem(self.ax1_para2sim)
         self.ax_para2sim.getAxis('right').linkToView(self.ax1_para2sim)
         self.ax1_para2sim.setXLink(self.ax_para2sim)
 
         # Axes layout
-        self.ax_para2sim.setLabel(
-            'bottom', '<font>Time</font>', units='<font>s</font>', color=dcolor['font'])
-        self.ax_para2sim.setLabel('left', '<font>Measured analyte</font>', units='<font>mg/L</font>',
+        self.ax_para2sim.setLabel('bottom', '<font>Time</font>', units='<font>s</font>', color=dcolor['font'])
+        self.ax_para2sim.setLabel('left', '<font>Measured analyte</font>', units='<font>{}</font>'.format(unit),
                                   color=dcolor['font'])
-        self.ax_para2sim.setLabel('right', '<font>Determined analyte</font>', units='<font>mg/L</font>',
+        self.ax_para2sim.setLabel('right', '<font>Determined analyte</font>', units='<font>{}</font>'.format(unit),
                                   color=dcolor['font'])
 
     def clear_sumtimdrive(self):
+        global unit
         self.fig_totalsim.clear()
         self.ax_totalsim = self.fig_totalsim.addPlot(row=1, col=0)
         self.ax_totalsim.setAutoVisible(y=True)
@@ -790,13 +973,11 @@ class SimPage(QWizardPage):
         self.fig_totalsim.addItem(label)
 
         # axis label
-        self.ax_totalsim.setLabel(
-            'bottom', '<font>Time</font>', units='<font>s</font>', color=dcolor['font'])
+        self.ax_totalsim.setLabel('bottom', '<font>Time</font>', units='<font>s</font>', color=dcolor['font'])
         if 'TAN' in self.total_para:
-            self.ax_totalsim.setLabel(
-                'left', '<math>TAN</math>', units='<font>mg/L</font>', color=dcolor['font'])
+            self.ax_totalsim.setLabel('left', '<math>TAN</math>', units='<font>{}</font>'.format(unit), color=dcolor['font'])
         else:
-            self.ax_totalsim.setLabel('left', '<font>Sum concentration</font>', units='<font>mg/L</font>',
+            self.ax_totalsim.setLabel('left', '<font>Sum concentration</font>', units='<font>{}</font>'.format(unit),
                                       color=dcolor['font'])
 
     def align_concentrations(self, ls_ph, ls_cSum_gmL):
@@ -808,7 +989,6 @@ class SimPage(QWizardPage):
             ls_ph = ls_ph * len(ls_cSum_gmL)
         else:
             if max(len(ls_ph), len(ls_cSum_gmL)) % min(len(ls_ph), len(ls_cSum_gmL)) == 0:
-                print('double the length of each other')
                 if len(ls_ph) < len(ls_cSum_gmL):
                     ls_ph = ls_ph * int(len(ls_cSum_gmL) / 2)
                 else:
@@ -822,10 +1002,8 @@ class SimPage(QWizardPage):
 
     def parameter_prep(self, t_plateau, ls_ph, ls_total, pKa):
         # target fluctuation of analytes
-        target_ph = bs.target_fluctuation(
-            ls_conc=ls_ph, tstart=0, tstop=t_plateau * 2, nP=1, analyte='pH')
-        target_sum = bs.target_fluctuation(
-            ls_conc=ls_total, tstart=0, tstop=t_plateau * 2, nP=1, analyte='Sum')
+        target_ph = bs.target_fluctuation(ls_conc=ls_ph, tstart=0, tstop=t_plateau * 2, nP=1, analyte='pH')
+        target_sum = bs.target_fluctuation(ls_conc=ls_total, tstart=0, tstop=t_plateau * 2, nP=1, analyte='Sum')
 
         # target concentration para2/para3 based on target pH (para2... base, para3... acid)
         para2 = pd.DataFrame(bs.henderson_Sum4Base(pKa=pKa, pH=target_ph['signal pH'].to_numpy(),
@@ -968,8 +1146,7 @@ class SimPage(QWizardPage):
         # get sum concentration(s) and pH value(s) and align list of fluctuation points
         ls_cSum_gmL = self._linEdit2list(line=self.paraSum_conc_edit.text())
         ls_ph = self._linEdit2list(line=self.ph_edit.text())
-        ls_ph, ls_cSum_gmL = self.align_concentrations(
-            ls_ph=ls_ph, ls_cSum_gmL=ls_cSum_gmL)
+        ls_ph, ls_cSum_gmL = self.align_concentrations(ls_ph=ls_ph, ls_cSum_gmL=ls_cSum_gmL)
 
         # determine all required target concentrations
         df_target = self.parameter_prep(ls_ph=ls_ph, ls_total=ls_cSum_gmL, pKa=float(self.para2_pka_edit.text()),
@@ -992,7 +1169,8 @@ class SimPage(QWizardPage):
                                   'pKa': float(self.para2_pka_edit.text()), 'E': sens_E, 'resolution': sens_res,
                                   't90': float(self.para2_t90_edit.text()), 'Base target': df_target['signal Base'],
                                   'Acid target': df_target['signal Acid'], 'Sum target': df_target['signal Sum'],
-                                  'conc_calib': conc_calib, 'set values': ls_cSum_gmL, 'set sensor2': ls_target_sens2})
+                                  'conc_calib': conc_calib, 'set values': ls_cSum_gmL, 'set sensor2': ls_target_sens2,
+                                  'system select': self.system_select})
         self.para_meas = dict({'plateau time': float(self.tsteady_edit.text())})
 
         # -----------------------------------------------------------------------------------------------------------
@@ -1022,15 +1200,14 @@ class SimPage(QWizardPage):
         self.clear_phsim()
         self.clear_para2timedrive()
         self.clear_sumtimdrive()
-
-        global ls_lines, _integral_counter
+        global ls_lines, _integral_counter, unit
         ls_lines, self.ls_xcoords, self.vlines_list = [], [], []
-
+        
         # target concentrations
-        df_res = pd.concat([self.sensor_ph['pH target'], self.sensor_para2['Base target'],
+        df_res = pd.concat([self.sensor_ph['pH target'], self.sensor_para2['Base target'], 
                             self.sensor_para2['Acid target'], self.sensor_para2['Sum target']], axis=1)
-        df_res.columns = ['target pH', 'target_mg/L Base',
-                          'target_mg/L Acid', 'target_mg/L Sum']
+        df_res.columns = ['target pH', 'target_{} Base'.format(unit),
+                          'target_{} Acid'.format(unit), 'target_{} Sum'.format(unit)]
 
         # individual sensor - reduce by individual plotting (different function)
         [df_res, cplateaupH, cplateauTotal,
@@ -1039,13 +1216,11 @@ class SimPage(QWizardPage):
         df_res = df_res.dropna()
 
         # pH sensor response
-        [df_pHrec, df_pHcalc] = bs.pH_sensor(
-            cplateau=cplateaupH, sensor_ph=self.sensor_ph, para_meas=self.para_meas)
+        [df_pHrec, df_pHcalc] = bs.pH_sensor(cplateau=cplateaupH, sensor_ph=self.sensor_ph, para_meas=self.para_meas)
         df_pHrec.index = [round(i, 2) for i in df_pHrec.index]
 
         # include sensor response and drift to result dataframe
-        df_res = pd.concat([df_res, df_pHrec.loc[df_res.index], df_pHcalc.loc[df_res.index]], 
-                           axis=1).sort_index(axis=1)
+        df_res = pd.concat([df_res, df_pHrec.loc[df_res.index], df_pHcalc.loc[df_res.index]], axis=1).sort_index(axis=1)
 
         # para2 sensor - calculate individual sensor response as well as total parameter
         df_res = bs.para2Sensorcalc(df_res=df_res, analyte=self.sensor_para2['analyte'], cplateauSum=cplateauTotal,
@@ -1054,23 +1229,22 @@ class SimPage(QWizardPage):
 
         # ---------------------------------------------------------------------------------------------------------
         # plotting part | individual sensor - target vs record
-        _ = plot_phsensor(df_res=self.df_res,
-                          color=dcolor['font'], fig=self.fig_phsim)
+        _ = plot_phsensor(df_res=self.df_res, color=dcolor['font'], fig=self.fig_phsim)
         _ = plot_parasensor(df_res=self.df_res,  analyte=self.sensor_para2['analyte'], para2=self.para2,
                             para3=self.para3, color=dcolor['font'], para_sum=self.total_para, fig=self.fig_para2sim,
-                            ax=self.ax_para2sim, ax1=self.ax1_para2sim)
+                            ax=self.ax_para2sim, ax1=self.ax1_para2sim, labels=self.system_select)
 
         # final total parameter model
-        _ = plot_totalModel(df_res=self.df_res, color=dcolor['font'], para_sum=self.total_para,
-                            fig1=self.ax_totalsim)
+        _ = plot_totalModel(df_res=self.df_res, color=dcolor['font'], para_sum=self.total_para, fig1=self.ax_totalsim,
+                            labels=self.system_select)
         self.fig_totalsim.scene().sigMouseClicked.connect(self.mouseMoved)
 
         # --------------------------------------------------------------
         # re-draw figures for saving with transparent/white background
         fig_pH = plot_phsensor4save(df_res=self.df_res)
         fig_base = plot_paras4save(df_res=self.df_res, analyte=self.sensor_para2['analyte'], para2=self.para2,
-                                   para3=self.para3, para_sum=self.total_para)
-        fig_total = plot_total4save(df_res=self.df_res, para_sum=self.total_para)
+                                   para3=self.para3, para_sum=self.total_para, labels=self.system_select)
+        fig_total = plot_total4save(df_res=self.df_res, para_sum=self.total_para, labels=self.system_select)
 
         # --------------------------------------------------------------------------------------------------------------
         # collect for result output (save data)
@@ -1121,7 +1295,7 @@ class SimPage(QWizardPage):
             self.int_button.setEnabled(True)
 
     def calc_integral(self):
-        global dres, _integral_counter, ls_lines
+        global dres, _integral_counter, ls_lines, unit
         _integral_counter += 1
         try:
             self.ls_xcoords
@@ -1131,17 +1305,16 @@ class SimPage(QWizardPage):
         # calculate integral for calculated/target total parameter using simpson's rule for discrete data
         # subtract calculated Sum by target Sum
         if len(self.ls_xcoords) == 2:
-            self.df4int = self.df_res[['Sum calc', 'target_mg/L Sum']].loc[min(self.ls_xcoords):max(self.ls_xcoords)]
+            self.df4int = self.df_res[['Sum calc', 'target_{} Sum'.format(unit)]].loc[min(self.ls_xcoords):max(self.ls_xcoords)]
             dfint_calc = integrate.simps(self.df4int['Sum calc'].to_numpy(), x=self.df4int.index)
             # target function assumed to have an infinite fast response (~step function)
-            #dfint_target = integrate.simps(self.df4int['target_mg/L Sum'].to_numpy(), x=self.df4int.index)
-            grp = self.df4int.groupby('target_mg/L Sum')
+            grp = self.df4int.groupby('target_{} Sum'.format(unit))
             dfint_target = np.sum([(k * (grp.groups[k][-1] - grp.groups[k][0])) for k in grp.groups.keys()])
 
             # Integration range (s), target pH, t90 pH, target Sum, t90 meas, integral target Sum, integral Sum, error
             result = list([(round(min(self.ls_xcoords), 2), round(max(self.ls_xcoords)), 2),
                            self.df_res['target pH'].loc[min(self.ls_xcoords):max(self.ls_xcoords)].mean(),
-                           self.sensor_ph['t90'], self.df_res['target_mg/L Sum'].mean(), self.sensor_para2['t90'], 
+                           self.sensor_ph['t90'], self.df_res['target_{} Sum'.format(unit)].mean(), self.sensor_para2['t90'], 
                            dfint_calc, dfint_target, dfint_calc - dfint_target])
 
             # add current results to dictionary (where all selected peak information are stored)
@@ -1363,39 +1536,40 @@ def plot_phsensor4save(df_res):
     return fig
 
 
-def plot_parasensor(df_res, para2, para3, analyte, color, para_sum, fig=None, ax=None, ax1=None):
+def plot_parasensor(df_res, para2, para3, analyte, color, para_sum, labels, fig=None, ax=None, ax1=None):
+    global unit
     if analyte == 'base' or analyte == 'Base':
-        df_target2 = df_res['target_mg/L Base'].dropna()
-        df_target3 = df_res['target_mg/L Acid'].dropna()
+        df_target2 = df_res['target_{} Base'.format(unit)].dropna()
+        df_target3 = df_res['target_{} Acid'.format(unit)].dropna()
         df_para2 = df_res['Base calc'].dropna()
         df_para3 = df_res['Acid calc'].dropna()
+        print(1544, labels)
 
+        # specify selected system (para2, para3, para_total)
         if 'TAN' in para_sum:
-            fig.setLabel('left', '<font>NH<sub>3</sub></font>',
-                         units='mg/L', color=dcolor['para2'])
-            fig.setLabel('right', '<font>NH<sub>4</sub><sup>+</sup></font>',
-                         units='mg/L', color=dcolor['para3'])
+            fig.setLabel('left', '<font>NH<sub>3</sub></font>', units=unit, color=dcolor['para2'])
+            fig.setLabel('right', '<font>NH<sub>4</sub><sup>+</sup></font>', units=unit, color=dcolor['para3'])
+        elif 'TDS' in para_sum:
+            fig.setLabel('left', '<font>HS<sup>-</sup></font>', units=unit, color=dcolor['para2'])
+            fig.setLabel('right', '<font>H<sub>2</sub>S</font>', units=unit, color=dcolor['para3'])
         else:
-            fig.setLabel('left', '<font>HS<sup>-</sup></font>',
-                         units='mg/L', color=dcolor['para2'])
-            fig.setLabel('right', '<font>H<sub>2</sub>S</font>',
-                         units='mg/L', color=dcolor['para3'])
+            fig.setLabel('left', '<font>{}</font>'.format(labels[0]), units=unit, color=dcolor['para2'])
+            fig.setLabel('right', '<font>{}</font>'.format(labels[1]), units=unit, color=dcolor['para3']) 
     else:
-        df_target2 = df_res['target_mg/L Acid'].dropna() 
-        df_target3 = df_res['target_mg/L Base'].dropna()
+        df_target2 = df_res['target_{} Acid'.format(unit)].dropna() 
+        df_target3 = df_res['target_{} Base'.format(unit)].dropna()
         df_para2 = df_res['Acid calc'].dropna()
         df_para3 = df_res['Base calc'].dropna()
         if 'TAN' in para_sum:
-            fig.setLabel('right', '<font>NH<sub>3</sub></font>',
-                         units='mg/L', color=dcolor['para2'])
-            fig.setLabel('left', '<font>NH<sub>4</sub><sup>+</sup></font>',
-                         units='mg/L', color=dcolor['para3'])
+            fig.setLabel('right', '<font>NH<sub>3</sub></font>', units=unit, color=dcolor['para2'])
+            fig.setLabel('left', '<font>NH<sub>4</sub><sup>+</sup></font>', units=unit, color=dcolor['para3'])
+        elif 'TDS' in para_sum:
+            fig.setLabel('left', '<font>HS<sup>-</sup></font>', units=unit, color=dcolor['para2'])
+            fig.setLabel('right', '<font>H<sub>2</sub>S</font>', units=unit, color=dcolor['para3'])
         else:
-            fig.setLabel('left', '<font>HS<sup>-</sup></font>',
-                         units='mg/L', color=dcolor['para2'])
-            fig.setLabel('right', '<font>H<sub>2</sub>S</font>',
-                         units='mg/L', color=dcolor['para3'])
 
+            fig.setLabel('left', '<font>{}</font>'.format(labels[0]), units=unit, color=dcolor['para2'])
+            fig.setLabel('right', '<font>{}</font>'.format(labels[1]), units=unit, color=dcolor['para3']) 
     # plotting with pyqtgraph
     penT = pg.mkPen(color=color, width=1, style=Qt.DashLine)
     penS = pg.mkPen(color=dcolor['para2'], width=2)
@@ -1403,19 +1577,22 @@ def plot_parasensor(df_res, para2, para3, analyte, color, para_sum, fig=None, ax
     penS1 = pg.mkPen(color=dcolor['para3'], width=2)
 
     # measured analyte
-    ax.plot(df_target2.index.to_numpy(), df_target2.to_numpy(),
-            pen=penT, label=para2 + ' target')
-    ax.plot(df_para2.index.to_numpy(),
-            df_para2.to_numpy(), pen=penS, label=para2)
+    if isinstance(para2, list):
+        para2 = para2[0]
+    ax.plot(df_target2.index.to_numpy(), df_target2.to_numpy(), pen=penT, label=para2 + ' target')
+    ax.plot(df_para2.index.to_numpy(), df_para2.to_numpy(), pen=penS, label=para2)
+    
     # other analyte
+    if isinstance(para3, list):
+        para3 = para3[0]
     ax1.addItem(pg.PlotCurveItem(x=df_target3.index.to_numpy(), y=df_target3.to_numpy(), pen=penT1,
                                  label=para3 + ' target'))
-    ax1.addItem(pg.PlotCurveItem(x=df_para3.index.to_numpy(),
-                y=df_para3.to_numpy(), pen=penS1, label=para3))
+    ax1.addItem(pg.PlotCurveItem(x=df_para3.index.to_numpy(), y=df_para3.to_numpy(), pen=penS1, label=para3))
     return fig
 
 
-def plot_paras4save(df_res, para2, para3, analyte, para_sum):
+def plot_paras4save(df_res, para2, para3, analyte, para_sum, labels):
+    global unit
     fig = pg.PlotWidget()
     fig.setBackground('w')
 
@@ -1428,29 +1605,34 @@ def plot_paras4save(df_res, para2, para3, analyte, para_sum):
     styles = {'color': 'k', 'font-size': '15px'}
     fig.setLabel('bottom', '<font>Time</font>', units='<font>s</font>', **styles)
     if analyte == 'base' or analyte == 'Base':
-        df_target2 = df_res['target_mg/L Base'].dropna()
+        df_target2 = df_res['target_{} Base'.format(unit)].dropna()
         df_para2 = df_res['Base calc'].dropna()
-        df_target3 = df_res['target_mg/L Acid'].dropna()
+        df_target3 = df_res['target_{} Acid'.format(unit)].dropna()
         df_para3 = df_res['Acid calc'].dropna()
 
         if 'TAN' in para_sum:
-            fig.setLabel('left', '<font>NH<sub>3</sub></font>', units='mg/L', **styles)
-            fig.setLabel(
-                'right', '<font>NH<sub>4</sub><sup>+</sup></font>', units='mg/L', **styles)
+            fig.setLabel('left', '<font>NH<sub>3</sub></font>', units=unit, **styles)
+            fig.setLabel('right', '<font>NH<sub>4</sub><sup>+</sup></font>', units=unit, **styles)
+        elif 'TDS' in para_sum:
+            fig.setLabel('left', '<font>HS<sup>-</sup></font>', units=unit, **styles)
+            fig.setLabel('right', '<font>H<sub>2</sub>S</font>', units=unit, **styles)
         else:
-            fig.setLabel('left', '<font>HS<sup>-</sup></font>', units='mg/L', **styles)
-            fig.setLabel('right', '<font>H<sub>2</sub>S</font>', units='mg/L', **styles)
+            fig.setLabel('left', '<font>{}</font>'.format(labels[0]), units=unit, **styles)
+            fig.setLabel('right', '<font>{}</font>'.format(labels[1]), units=unit, **styles) 
     else:
-        df_target3 = df_res['target_mg/L Base'].dropna()
+        df_target3 = df_res['target_{} Base'.format(unit)].dropna()
         df_para3 = df_res['Base calc'].dropna()
-        df_target2 = df_res['target_mg/L Acid'].dropna()
+        df_target2 = df_res['target_{} Acid'.format(unit)].dropna()
         df_para2 = df_res['Acid calc'].dropna()
         if 'TAN' in para_sum:
-            fig.setLabel('right', '<font>NH<sub>3</sub></font>', units='mg/L', **styles)
-            fig.setLabel('left', '<font>NH<sub>4</sub><sup>+</sup></font>', units='mg/L', **styles)
+            fig.setLabel('right', '<font>NH<sub>3</sub></font>', units=unit, **styles)
+            fig.setLabel('left', '<font>NH<sub>4</sub><sup>+</sup></font>', units=unit, **styles)
+        elif 'TDS' in para_sum:
+            fig.setLabel('left', '<font>HS<sup>-</sup></font>', units=unit, **styles)
+            fig.setLabel('right', '<font>H<sub>2</sub>S</font>', units=unit, **styles)
         else:
-            fig.setLabel('left', '<font>HS<sup>-</sup></font>', units='mg/L', **styles)
-            fig.setLabel('right', '<font>H<sub>2</sub>S</font>', units='mg/L', **styles)
+            fig.setLabel('left', '<font>{}</font>'.format(labels[0]), units=unit, **styles)
+            fig.setLabel('right', '<font>{}</font>'.format(labels[1]), units=unit, **styles) 
 
     # plotting with pyqtgraph
     penT = pg.mkPen(color=dcolor['background'], width=1, style=Qt.DashLine)
@@ -1483,15 +1665,19 @@ def plot_paras4save(df_res, para2, para3, analyte, para_sum):
     return fig
 
 
-def plot_totalModel(df_res, para_sum, color, fig1=None):
+def plot_totalModel(df_res, para_sum, color, labels, fig1=None):
+    global unit
     # plotting with pyqtgraph
-    df_target = df_res['target_mg/L Sum'].dropna()
+    df_target = df_res['target_{} Sum'.format(unit)].dropna()
     df_sim = df_res['Sum calc'].dropna()
 
     if 'TAN' in para_sum:
-        fig1.setLabel('left', '<math>TAN</math>', units='<font>mg/L</font>', color=dcolor['font'])
+        fig1.setLabel('left', '<math>TAN</math>', units='<font>{}</font>'.format(unit), color=dcolor['font'])
+    elif 'TDS' in para_sum:
+        fig1.setLabel('left', '<font>TDS</font>', units='<font>{}</font>'.format(unit), color=dcolor['font'])
     else:
-        fig1.setLabel('left', '<font>Sum concentration</font>', units='<font>mg/L</font>', color=dcolor['font'])
+        fig1.setLabel('left', '<font>{}</font>'.format(labels[-1]), units='<font>{}</font>'.format(unit), color=dcolor['font'])
+
     penT = pg.mkPen(color=color, width=1, style=Qt.DashLine)
     penS = pg.mkPen(color=dcolor['total para'], width=2)
     fig1.plot(list(df_target.index), list(df_target.to_numpy()), pen=penT, label=para_sum + ' target')
@@ -1513,19 +1699,22 @@ def plot_totalModel(df_res, para_sum, color, fig1=None):
     return fig1
 
 
-def plot_total4save(df_res, para_sum):
+def plot_total4save(df_res, para_sum, labels):
+    global unit
     fig = pg.PlotWidget()
     fig.setBackground('w')
 
     styles = {'color': 'k', 'font-size': '15px'}
     fig.setLabel('bottom', '<font>Time</font>', units='<font>s</font>', **styles)
     if 'TAN' in para_sum:
-        fig.setLabel('left', '<math>TAN</math>', units='<font>mg/L</font>', **styles)
+        fig.setLabel('left', '<math>TAN</math>', units='<font>{}</font>'.format(unit), **styles)
+    elif 'TDS' in para_sum:
+        fig.setLabel('left', '<font>TDS</font>', units='<font>{}</font>'.format(unit), **styles)
     else:
-        fig.setLabel('left', '<font>Sum concentration</font>', units='<font>mg/L</font>', **styles)
+        fig.setLabel('left', '<font>{}</font>'.format(labels[-1]), units='<font>{}</font>'.format(unit), **styles)
 
     # plotting with pyqtgraph
-    df_target = df_res['target_mg/L Sum'].dropna()
+    df_target = df_res['target_{} Sum'.format(unit)].dropna()
     df_sim = df_res['Sum calc'].dropna()
 
     penT = pg.mkPen(color=dcolor['background'], width=1, style=Qt.DashLine)
@@ -1561,6 +1750,7 @@ if __name__ == '__main__':
     import sys
 
     app = QtWidgets.QApplication(sys.argv)
+
     path = os.path.join(loc_path + r'/picture/icon.png')
     app.setWindowIcon(QIcon(path))
 

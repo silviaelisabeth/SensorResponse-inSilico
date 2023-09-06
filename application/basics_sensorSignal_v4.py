@@ -227,8 +227,8 @@ def calibSensor_pH(target_ph, sensor_ph):
 def calibSensor_para(target_para, sensor2):
     # sensor 2 - targeted concentration fluctuation in mV
     para = _calibration_electroSens(E=sensor2['E'], conc=sensor2['conc_calib'])
-
-    df_sigSens2_mV = pd.DataFrame(target_para['target_mg/L Sum'] * para['slope'] + para['E0'])
+    
+    df_sigSens2_mV = pd.DataFrame(target_para.filter(like='Sum', axis=1) * para['slope'] + para['E0'])
     df_sigSens2_mV.columns = ['potential mV Sum']
 
     # what are the specific signal levels
@@ -271,7 +271,7 @@ def para2_sensors(cplateau, sensor2, para_meas):
 
 def para2Sensorcalc(df_res, analyte, cplateauSum, df_pHcalc, sensor2, para_meas):
     if analyte == 'base' or analyte == 'Base':
-        cBase = [df_res[df_res['Potential mV Sum'] == c]['target_mg/L Base'].to_numpy() for c in cplateauSum]
+        cBase = [df_res[df_res['Potential mV Sum'] == c].filter(like='Base', axis=1).to_numpy() for c in cplateauSum]
         ls_cBase = list()
         for li in cBase:
             ls_cBase = np.append(ls_cBase, li)
@@ -287,8 +287,7 @@ def para2Sensorcalc(df_res, analyte, cplateauSum, df_pHcalc, sensor2, para_meas)
                                                    c_base=df_base_calc['Base calc'].to_numpy()), columns=['Acid calc'],
                                     index=[round(i, 2) for i in df_pHcalc.index])
     elif analyte == 'acid' or analyte == 'Acid':
-        cAcid = [df_res[df_res['Potential mV Sum'] == c]['target_mg/L Acid'].to_numpy() for c in cplateauSum]
-
+        cAcid = [df_res[df_res['Potential mV Sum'] == c].filter(like='Acid', axis=1).to_numpy() for c in cplateauSum]
         ls_cAcid = list()
         for li in cAcid:
             ls_cAcid = np.append(ls_cAcid, li)
