@@ -57,7 +57,7 @@ _integral_counter = 0       # helper scalar counting the integration
 ls_lines = list()           # list to collect integration boundaries in pyqtgraph
 dres = dict()               # simulation results
 # get the local path for relative directories
-loc_path = os.getcwd() + r'/2019-2022/Project_Fabi/py2exe/'
+loc_path = os.getcwd() 
 
 wizard_page_index = {"IntroPage": 0, "SimPage": 1}
 
@@ -845,7 +845,7 @@ class SimPage(QWizardPage):
         # identify the system according to given parameter
         # para2 will be the measured, para3 the calculated parameter
         global systems, acidBase
-        print(848, self.para2_name)
+
         if self.para2_name:
             # H2S/HS- known system
             if self.para2_name in systems['TDS']['base']:
@@ -939,10 +939,6 @@ class SimPage(QWizardPage):
         self.paraSum_conc_edit.setText('100.0')
         self.para2_t90_edit.setText('60.')
         self.para2_pka_edit.setText('9.25')
-        #self.para2_lbl.setText('c(Sum)')
-
-        # set default
-        #self.initializePage()
 
     def clear_phsim(self):
         self.fig_phsim.clear()
