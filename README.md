@@ -20,11 +20,15 @@ This Notebook as well as the related python script *dbs_CodeSnippes.py* can be f
 ### Requirements
 When using the source code, python3 and the following Python packages are required for execution: 
 ```
-numpy (version 1.24.2), pandas (version 1.5.3), scipy (version 1.10.1), and seaborn (version 0.12.2)
+numpy (version 1.24.2)
+pandas (version 1.5.3)
+scipy (version 1.10.1)
+pyqtgraph (version 0.13.3)
+seaborn (version 0.12.2)
 ``` 
 In addition, when using the GUI, the following packages are required:
 ```
-PyQt5 (version 5.15.9), and pyqtgraph (version 0.13.3)
+PyQt5 (version 5.15.9) 
 ```
 
 The package versions listed are the versions used when the so+ware is released. Older versions might cause errors and bugs, whereas newer versions should not make much of a difference. If you have difficulties running the software, please do not hesitate to reach out via email at info@silviazieger.com.
