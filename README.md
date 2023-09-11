@@ -14,7 +14,7 @@ For the software application to run properly, leave all the files in the folder 
 
 ### Exploring different response curves
 In addition to the GUI which only allows a sensor response defined by the Gompertz response curve, we included a Jupyter Notebook *Code_snippes.ipynb* in which we included a step-by-step explanation of the simulation and allow the user to add other response curves for explorational reason. 
-This Notebook and as well as the related python script *dbs_CodeSnippes.py* can be found in the folder *[scripts](scripts/)*. To be able to run the Notebook, both scripts have to be stored in the same folder. 
+This Notebook as well as the related python script *dbs_CodeSnippes.py* can be found in the folder *[scripts](scripts/)*. To be able to execute the Notebook, both scripts have to be stored in the same folder. 
 
 
 ### Requirements
