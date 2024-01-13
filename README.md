@@ -1,5 +1,5 @@
 # SensorResponse-inSilico
-SensinSilico is a simulation software published together with the respective peer-reviewed article *_Timing Matters: The Overlooked Issue of Response Time Mismatch in pH-Dependent Analyte Sensing using Multiple Sensors_* published in the peer-reviewed journal _Analyst_. It studies the error propagation when combining two (electrochemical) sensors with different response times. This document is meant as an installation and operation manual to use the software and explains the relevant application’s functions.
+SensinSilico is a simulation software published together with the respective peer-reviewed article *_Timing Matters: The Overlooked Issue of Response Time Mismatch in pH-Dependent Analyte Sensing using Multiple Sensors_* published in the peer-reviewed journal *Analyst* (https://doi.org/10.1039/D3AN01207G). It studies the error propagation when combining two (electrochemical) sensors with different response times. This document is meant as an installation and operation manual to use the software and explains the relevant application’s functions.
 
 ### Background
 In environmental sensing, especially in total parameter monitoring, it is required to monitor not one but at least two analytes simultaneously and ideally at the same location. However, due to differences in sensor characteristics, e.g., acquisition rate, sensor response, etc., it can be cumbersome to do this for multiple sensors.
@@ -39,3 +39,7 @@ Next to the readme file, a manual *Instruction.pdf* is uploaded. Here you will f
 ### Disclaimer
 The software has been tested for both MacOS (MacBook Pro – Apple M1, Version 13.4) and Windows (Version 10.0.19045). The original published version is linked to the following DOI: 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.8336037.svg)](https://doi.org/10.5281/zenodo.8336037)
+
+![Get](https://github.com/silviaelisabeth/SensorResponse-inSilico/assets/46005283/ccd19b10-0ad3-43b5-b137-36606140ac90)
+
+
