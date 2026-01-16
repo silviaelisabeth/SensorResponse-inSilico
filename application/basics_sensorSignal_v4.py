@@ -273,6 +273,7 @@ def para2Sensorcalc(df_res, analyte, cplateauSum, df_pHcalc, sensor2, para_meas)
     if analyte == 'base' or analyte == 'Base':
         cBase = [df_res[df_res['Potential mV Sum'] == c].filter(like='Base', axis=1).to_numpy() for c in cplateauSum]
         ls_cBase = list()
+        print()
         for li in cBase:
             ls_cBase = np.append(ls_cBase, li)
         # find all plateaus even though they repeat themselves
