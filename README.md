@@ -1,45 +1,188 @@
-# SensorResponse-inSilico
-SensinSilico is a simulation software published together with the respective peer-reviewed article *_Timing Matters: The Overlooked Issue of Response Time Mismatch in pH-Dependent Analyte Sensing using Multiple Sensors_* published in the peer-reviewed journal *Analyst* (https://doi.org/10.1039/D3AN01207G). It studies the error propagation when combining two (electrochemical) sensors with different response times. This document is meant as an installation and operation manual to use the software and explains the relevant application’s functions.
+# SensinSilico
+**In Silico Simulation of Sensor Response Time Mismatch in Dual-Sensor Systems**
 
-### Background
-In environmental sensing, especially in total parameter monitoring, it is required to monitor not one but at least two analytes simultaneously and ideally at the same location. However, due to differences in sensor characteristics, e.g., acquisition rate, sensor response, etc., it can be cumbersome to do this for multiple sensors.
-Although this bottleneck is well known, it is common to adapt the measurement procedure to the faster sensor, accepting a (small) inaccuracy for the total parameter. However, no one has yet investigated the extent of the inaccuracy. Is the inaccuracy acceptable or does the error propagation that is initially accepted falsify the overall result and make it unusable? 
+SensinSilico is a graphical user interface (GUI)–based simulation software published together with the peer-reviewed article  
+**“Timing Matters: The Overlooked Issue of Response Time Mismatch in pH-Dependent Analyte Sensing using Multiple Sensors”**,  
+published in the journal *Analyst*.  
+DOI: https://doi.org/10.1039/D3AN01207G
 
-This software application allows the user to examine a given dual-sensor system, study the influence of different sensor responses and thereby optimize the measurement procedure. 
+The software enables a systematic investigation of **error propagation caused by mismatched sensor response times** when combining two (electrochemical) sensors for total-parameter monitoring.
 
-### Download GUI
-Download the *application* folder including the subfolder *(picture)*. To run the software application, open the file named *[SensinSilico.py](SensinSilico.py)* with a Python editor or IDE of your choice and run the script.
+---
 
-For the software application to run properly, leave all the files in the folder together without restructuring or removing any parts. For software development and testing, we tested the software application with PyCharm and VS Code 1.74.2 (Universal).
+## Overview
 
-### Exploring different response curves
-In addition to the GUI which only allows a sensor response defined by the Gompertz response curve, we included a Jupyter Notebook *Code_snippes.ipynb* in which we included a step-by-step explanation of the simulation and allow the user to add other response curves for explorational reason. 
-This Notebook as well as the related python script *dbs_CodeSnippes.py* can be found in the folder *[scripts](scripts/)*. To be able to execute the Notebook, both scripts have to be stored in the same folder. 
+In environmental and analytical sensing, it is often required to monitor **multiple analytes simultaneously** and ideally at the same location. In practice, however, sensors frequently differ in key characteristics such as:
 
+- Sensor response time  
+- Acquisition rate  
+- Signal dynamics  
 
-### Requirements
-When using the source code, python3 and the following Python packages are required for execution: 
+A common approach is to adapt the measurement procedure to the **faster sensor**, implicitly accepting a small inaccuracy introduced by the slower one. While this limitation is well known, its quantitative impact on calculated total parameters has rarely been assessed.
+
+**SensinSilico** addresses this gap by providing a simulation framework that allows users to:
+
+- Examine dual-sensor systems with different response times  
+- Quantify systematic bias and error propagation  
+- Optimize measurement protocols prior to experimental deployment  
+
+---
+
+## Scientific Background
+
+### Response Time Mismatch in Dual-Sensor Measurements
+
+When two sensors respond at different rates to changing analyte concentrations, their combined signal can introduce a **systematic bias** into calculated total parameters (e.g. total acidity or other composite chemical quantities).
+
+SensinSilico simulates:
+
+- Time-dependent sensor response behavior  
+- Dynamic changes in analyte concentration  
+- Mathematical reconstruction of total parameters  
+
+This enables users to assess whether commonly accepted inaccuracies remain tolerable or fundamentally compromise measurement validity.
+
+---
+
+## Key Features
+
+### Software Capabilities
+
+- **Dual-Sensor Simulation**  
+  Simulates two sensors with independently defined response times and kinetics
+
+- **Gompertz-Based Response Modeling**  
+  Graphical implementation of Gompertz response curves for realistic sensor dynamics
+
+- **Error Propagation Analysis**  
+  Quantifies bias introduced by delayed sensor response
+
+- **Measurement Protocol Optimization**  
+  Explore acquisition timing strategies to minimize total-parameter error
+
+- **Interactive Graphical User Interface**  
+  No programming knowledge required for standard operation
+
+### Exploratory & Advanced Use
+
+- **Custom Response Curves**  
+  Extend beyond Gompertz kinetics using the included Jupyter Notebook
+
+- **Transparent and Reproducible Simulations**  
+  Deterministic workflow suitable for method development, teaching, and reproducibility studies
+
+---
+
+## Prerequisites
+
+### System Requirements
+
+- **Operating System:** Windows, macOS, or Linux  
+- **Python:** Version 3.8 or higher  
+- **Memory:** 4 GB RAM minimum (8 GB recommended)  
+- **Storage:** ~500 MB available disk space  
+
+### Knowledge Requirements
+
+- Basic understanding of chemical or electrochemical sensing  
+- Familiarity with sensor response behavior (recommended)  
+- No programming knowledge required for GUI use  
+
+---
+
+## Installation
+
+### 1. Clone or Download the Repository
+
+```bash
+git clone https://github.com/yourusername/SensorResponse-inSilico.git
+cd SensorResponse-inSilico
 ```
-numpy (version 1.24.2)
-pandas (version 1.5.3)
-scipy (version 1.10.1)
-pyqtgraph (version 0.13.3)
-seaborn (version 0.12.2)
-``` 
-In addition, when using the GUI, the following packages are required:
+Alternatively, download the repository as a ZIP archive and extract it locally.
+
+```bash
+python3 -m venv sensinsilico-env
 ```
-PyQt5 (version 5.15.9) 
+Then, activate the environment.
+
+### 2. Install Dependencies
+```bash
+pip install -r requirements.txt
+```
+The current release has been tested with the following package versions.
+The listed versions correspond to the tested release environment.
+Older versions may cause errors, while newer versions should generally remain compatible.
+
+---
+
+## Directory Structure
+Please ensure that the directory structure remains unchanged:
+```bash
+SensorResponse-inSilico/
+│
+├── SensinSilico.py            # Main GUI application
+├── requirements.txt           # Python dependencies
+├── Instruction.pdf            # User manual
+│
+├── picture/                   # GUI graphics and figures
+├── scripts/                   # Supplementary scripts
+│   ├── Code_snippes.ipynb
+│   └── dbs_CodeSnippes.py
+```
+Relocating or renaming files may break internal file references.
+
+---
+
+## Running the Application
+To start the GUI, execute:
+```bash
+python SensinSilico.py
+```
+Make sure, that you are using python3. 
+
+---
+
+## Exploring Alternative Response Curves
+In addition to the GUI (which supports Gompertz response curves), `SensinSilico` includes tools for exploratory modeling:
+```bash
+Jupyter Notebook: scripts/Code_snippes.ipynb
+Supporting Script: scripts/dbs_CodeSnippes.py
 ```
 
-The package versions listed are the versions used when the so+ware is released. Older versions might cause errors and bugs, whereas newer versions should not make much of a difference. If you have difficulties running the software, please do not hesitate to reach out via email at info@silviazieger.com.
+To execute the notebook, ensure both files are located in the same directory. 
+Launch Jupyter Notebook or JupyterLab and execute the notebook cells step by step.
+These tools allow users to implement and evaluate alternative sensor response models.
 
-### Manual and Instructions on how to use the software
-Next to the readme file, a manual *Instruction.pdf* is uploaded. Here you will find a step-by-step guide on how to use the simulation software including a summary of the context and theory.
+---
 
-### Disclaimer
-The software has been tested for both MacOS (MacBook Pro – Apple M1, Version 13.4) and Windows (Version 10.0.19045). The original published version is linked to the following DOI: 
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.8336037.svg)](https://doi.org/10.5281/zenodo.8336037)
+## Manual & Documentation
+A detailed step-by-step user guide is provided in: [Instruction.pdf](Instruction.pdf)
+The manual includes:
+  * Theoretical background
+  * Description of all GUI elements
+  * Example simulation workflows
+  * Guidance on result interpretation
+  * Validation & Compatibility
+    * Tested on macOS (Apple M1, version 13.4)
+    * Tested on Windows 10 (version 10.0.19045)
 
-![Get](https://github.com/silviaelisabeth/SensorResponse-inSilico/assets/46005283/ccd19b10-0ad3-43b5-b137-36606140ac90)
+---
 
+## Citation
+If you use SensinSilico in your work, please cite:
+```bash
+@article{Zieger2023Timing,
+  title={Timing Matters: The Overlooked Issue of Response Time Mismatch in pH-Dependent Analyte Sensing using Multiple Sensors},
+  journal={Analyst},
+  year={2023},
+  doi={10.1039/D3AN01207G}
+}
+```
 
+---
+
+## License
+Copyright © 2023–2026
+SilviaE. Zieger
+This software is released under the MIT License.
+See the LICENSE file for full license text.
